@@ -1,0 +1,81 @@
+@import "tailwindcss";
+
+/*
+ * fitr design tokens.
+ *
+ * Two registers, one type scale:
+ *   - "Gallery" for wardrobe/outfit views: paper ground, generous space, the
+ *     clothes supply all the colour.
+ *   - "Utility" for bulk import and triage: same tokens, tighter spacing.
+ *
+ * The `--surface` token matters more than it looks. Cutouts are transparent
+ * PNGs, so a white t-shirt on the paper ground is nearly invisible. Items
+ * always sit on a `--surface` card with a hairline border so light garments
+ * stay legible.
+ */
+:root {
+  --paper: #faf9f7; /* page ground */
+  --surface: #ffffff; /* item cards — never the same as --paper */
+  --surface-sunk: #f2f0ec; /* wells, empty slots */
+  --ink: #1a1917;
+  --ink-muted: #6b6862;
+  --ink-faint: #a39f98;
+  --line: #e6e3de;
+  --line-strong: #d4d0c9;
+  --accent: #1a1917;
+  --accent-ink: #faf9f7;
+  --danger: #a13d2d;
+  --radius: 0.5rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --paper: #131211;
+    --surface: #1c1b19;
+    --surface-sunk: #0e0d0c;
+    --ink: #f0eeea;
+    --ink-muted: #9d9890;
+    --ink-faint: #6a655e;
+    --line: #2c2a27;
+    --line-strong: #3d3a36;
+    --accent: #f0eeea;
+    --accent-ink: #131211;
+    --danger: #d97a66;
+  }
+}
+
+@theme inline {
+  --color-paper: var(--paper);
+  --color-surface: var(--surface);
+  --color-surface-sunk: var(--surface-sunk);
+  --color-ink: var(--ink);
+  --color-ink-muted: var(--ink-muted);
+  --color-ink-faint: var(--ink-faint);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--accent);
+  --color-accent-ink: var(--accent-ink);
+  --color-danger: var(--danger);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --radius-card: var(--radius);
+}
+
+body {
+  background: var(--paper);
+  color: var(--ink);
+}
+
+/* Display type: tight tracking, never shouty. */
+.display {
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+
+/* Small caps label used for section headers and metadata keys. */
+.label {
+  font-size: 0.6875rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--ink-muted);
+}
