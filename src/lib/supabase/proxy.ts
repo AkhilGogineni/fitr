@@ -55,6 +55,14 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
+  // API routes answer for themselves. Redirecting one to /login sends an HTML
+  // page to a caller expecting JSON, so a session that expires mid-import
+  // surfaces as an unparseable response instead of "not signed in". Every
+  // handler under /api checks `getUser()` first, so nothing is loosened here.
+  if (!user && pathname.startsWith("/api/")) {
+    return NextResponse.json({ error: "Not signed in" }, { status: 401 });
+  }
+
   if (!user && !isPublic(pathname)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";

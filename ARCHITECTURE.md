@@ -1,8 +1,8 @@
 # Architecture
 
 The map of the codebase, and why things are the way they are. Kept current as
-phases land. Full plan and rationale live in the project plan; this is the
-working reference.
+phases land. Full phased plan and rationale live in [`docs/PLAN.md`](docs/PLAN.md);
+this is the working reference.
 
 ## What this is
 
@@ -39,22 +39,66 @@ src/
   proxy.ts                   Session refresh + optimistic auth redirect
   app/
     (app)/                   Signed-in shell — nav, auth gate
-      wardrobe/              Phase 1
+      wardrobe/              Gallery of cutouts
+        actions.ts           Server Actions: create, correct, confirm, archive
+        add/                 Intake — URL import + camera, cutting, review grid
       outfits/               Phase 2
       today/                 Phase 3
       inbox/                 Phase 4
     login/                   Email + password auth
-    api/uploads/sign/        Presigned R2 PUT URLs
+    api/
+      uploads/sign/          Presigned R2 PUT URLs
+      import/url/            Reads a product page, returns its metadata
+      import/image/          Relays a product photo (CORS, not convenience)
+      tag/                   Vision auto-tagging, key stays server-side
   components/
+    icons.tsx                The six glyphs this app uses, drawn here
   lib/
     env.ts                   Env access that fails loudly and early
+    garments.ts              Shared vocabulary: categories, seasons, tag coercion
+    items.ts                 Row type + the literal select column list
     r2.ts                    R2 client, key naming, presigning (server-only)
+    intake/
+      background-removal.ts  RMBG-1.4 in the browser (client-only)
+      product-page.ts        JSON-LD + OpenGraph extraction
+      safe-fetch.ts          SSRF-guarded outbound fetch (server-only)
+      tagging.ts             Provider-agnostic tagger, Gemini behind it
+      upload.ts              Browser → R2 via presigned PUT
     supabase/
       client.ts              Browser client
       server.ts              Server client + getUser()
       proxy.ts               Session refresh used by src/proxy.ts
 supabase/migrations/         SQL, applied by hand via the SQL editor
 ```
+
+## The intake pipeline
+
+Both ways into the wardrobe converge on the same four steps, in the browser:
+
+```
+ paste a URL                     take a photo
+      │                               │
+ /api/import/url  (JSON-LD)           │
+      │                               │
+ /api/import/image (CORS relay)       │
+      └───────────────┬───────────────┘
+                      ▼
+        RMBG-1.4 cutout, on this machine
+                      ▼
+   presigned PUT → R2     +     /api/tag → vision model
+                      ▼
+          INSERT items (needs_review = true)
+                      ▼
+              review grid corrects it
+```
+
+A retailer's photo is cut too, not stored as-is. It arrives on white, and white
+is not transparent: dropped onto the Phase 2 collage it would be a garment
+inside a white rectangle. One pipeline, one kind of artefact.
+
+Cutting is serialised; uploading and tagging are not. Inference saturates the
+GPU, so two garments at once is slower than one after another — but uploads and
+the tagging call are network-bound and overlap with the next garment's cut.
 
 ## Things that will trip you up
 
@@ -84,7 +128,32 @@ permission error. See the grants block at the foot of the migration.
 
 **Cutouts are transparent, so white garments vanish.** Items always sit on a
 `--surface` card with a hairline border, never directly on `--paper`. Check new
-image UI against both light and dark themes.
+image UI against both light and dark themes. Intake has a ground toggle
+(Paper / Dark / Grid) for exactly this: a cutout with an opaque white matte
+instead of real transparency looks perfect on paper and shows up immediately on
+the checker.
+
+**RMBG-1.4 will not load through the `background-removal` pipeline.** Its config
+declares `SegformerForSemanticSegmentation`, which the pipeline's model registry
+rejects. `lib/intake/background-removal.ts` loads it with `AutoModel` and
+`model_type: "custom"` instead, supplying the processor config by hand because
+the model ships no `preprocessor_config.json`. The pipeline API works with
+`Xenova/modnet`, but that is a portrait matting model and a coat on a hanger is
+not a portrait.
+
+**`supabase-js` types a query from the literal select string.** Build that string
+by concatenation and the row type collapses to `GenericStringError`, which
+surfaces as a wall of "property does not exist" errors nowhere near the cause.
+`lib/items.ts` holds one literal, imported everywhere.
+
+**A `"use server"` file may only export async functions.** Types are fine (they
+erase), but a shared constant in `actions.ts` is a build error — which is the
+other reason `lib/items.ts` exists.
+
+**API routes answer 401 rather than redirecting.** The proxy sends signed-out
+page requests to `/login`, but anything under `/api` gets JSON instead: a fetch
+that follows a redirect to an HTML login page reports a parse error, not an
+expired session.
 
 **The cookie dance in `lib/supabase/proxy.ts` is load-bearing.** Refreshed tokens
 must be written to both the request and the response. Dropping either produces
@@ -93,7 +162,10 @@ intermittent logouts that are miserable to track down.
 ## Status
 
 - **Phase 0 — complete.** Scaffold, schema + RLS, auth, R2 uploads, app shell.
-- Phase 1 — wardrobe intake (URL import + camera, background removal, tagging).
+- **Phase 1 — built, awaiting real use.** URL import, camera intake, in-browser
+  background removal, auto-tagging, review grid. The exit condition is ~30 real
+  garments in the app and a timed comparison of the two paths — that is a
+  wardrobe-in-front-of-you job, not a code one.
 - Phase 2 — outfit canvas with gap slots.
 - Phase 3 — "what do I wear today" + wear logging.
 - Phase 4 — capture inbox (iOS Shortcut + browser extension).

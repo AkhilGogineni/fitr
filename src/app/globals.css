@@ -26,6 +26,10 @@
   --accent-ink: #faf9f7;
   --danger: #a13d2d;
   --radius: 0.5rem;
+  /* Offset and blur, both. A zero-offset halo reads as a glow, not as a card
+     lifted off the page. */
+  --shadow-card: 0 1px 2px rgb(26 25 23 / 0.04),
+    0 8px 20px -14px rgb(26 25 23 / 0.22);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -41,6 +45,7 @@
     --accent: #f0eeea;
     --accent-ink: #131211;
     --danger: #d97a66;
+    --shadow-card: 0 1px 2px rgb(0 0 0 / 0.4), 0 10px 24px -16px rgb(0 0 0 / 0.7);
   }
 }
 
@@ -59,6 +64,47 @@
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
   --radius-card: var(--radius);
+  --shadow-card: var(--shadow-card);
+  --animate-rise: rise 0.45s cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-slide: slide 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
+}
+
+/*
+ * One authored moment: a garment card arriving. It rises and resolves out of a
+ * slight blur, which reads like a photograph developing rather than a UI
+ * element sliding in — the only animation in the app that isn't a state change.
+ */
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+    filter: blur(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+    filter: blur(0);
+  }
+}
+
+/* Indeterminate progress, for the stages that can't report a percentage. */
+@keyframes slide {
+  from {
+    transform: translateX(-110%);
+  }
+  to {
+    transform: translateX(410%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
 }
 
 body {
@@ -70,6 +116,30 @@ body {
 .display {
   letter-spacing: -0.02em;
   text-wrap: balance;
+}
+
+/*
+ * The checker ground.
+ *
+ * A cutout with an opaque white matte instead of real transparency looks
+ * perfect on a light page and wrong everywhere else — and you only find out in
+ * Phase 2, with the garment pasted onto a collage. Intake can switch the ground
+ * under every cutout to this, where a white matte shows up immediately as a
+ * solid square swallowing the squares behind it.
+ */
+.ground-check {
+  background-color: var(--surface);
+  background-image:
+    linear-gradient(45deg, var(--surface-sunk) 25%, transparent 25%),
+    linear-gradient(-45deg, var(--surface-sunk) 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, var(--surface-sunk) 75%),
+    linear-gradient(-45deg, transparent 75%, var(--surface-sunk) 75%);
+  background-size: 14px 14px;
+  background-position:
+    0 0,
+    0 7px,
+    7px -7px,
+    -7px 0;
 }
 
 /* Small caps label used for section headers and metadata keys. */

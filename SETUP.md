@@ -12,8 +12,10 @@ and handling your own credentials.
 1. Create a project at [supabase.com](https://supabase.com) (free tier, 2 projects allowed).
 2. **Project Settings → API**: copy the **Project URL** and the **anon public** key
    into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. **SQL Editor → New query**: paste the whole of
-   `supabase/migrations/0001_initial_schema.sql` and run it.
+3. **SQL Editor → New query**: run the migrations in `supabase/migrations` in
+   filename order — `0001_initial_schema.sql`, then `0002_intake.sql`. Paste each
+   file whole and run it. (`0002` adds the `needs_review` flag that intake sets
+   and the review grid clears.)
 4. **Authentication → Sign In / Providers → Email**: turn **Confirm email** *off*.
 
    Why: the free tier's built-in SMTP allows only a couple of emails per hour, so
@@ -37,6 +39,24 @@ difference between comfortable and cramped.
 3. Your **Account ID** is in the R2 sidebar → `R2_ACCOUNT_ID`.
 4. **Bucket → Settings → Public access**: enable the `r2.dev` subdomain and copy
    that URL into `R2_PUBLIC_BASE_URL`.
+5. **Bucket → Settings → CORS policy**: add the rule below.
+
+   ```json
+   [
+     {
+       "AllowedOrigins": ["http://localhost:3000", "https://YOUR-APP.vercel.app"],
+       "AllowedMethods": ["PUT", "GET"],
+       "AllowedHeaders": ["content-type"],
+       "MaxAgeSeconds": 3600
+     }
+   ]
+   ```
+
+   Why it matters: photos go from the browser straight to R2 using a presigned
+   URL, so the bytes never pass through the app server. Without this rule the
+   browser blocks that request before it is sent, and the only symptom is a
+   generic "Upload was blocked by the browser" on every item. Add your Vercel
+   domain here too when you deploy.
 
 **Fallback if you'd rather skip the card:** Supabase Storage works with the same
 interface. Say so and I'll swap `src/lib/r2.ts` for a Supabase Storage adapter —
@@ -48,6 +68,13 @@ Not needed to boot; Phase 1 is the first phase that calls it.
 
 Get a key at [aistudio.google.com/apikey](https://aistudio.google.com/apikey) →
 `GEMINI_API_KEY`.
+
+`GEMINI_MODEL` is optional and defaults to `gemini-3.6-flash`. Google renames and
+retires these regularly, and which ones a given key may call for free changes
+independently of that — so if tagging reports that the model isn't available to
+your key, set this variable rather than editing code. Everything else still
+works without a key at all: items save untagged and you fill in the category in
+the review grid.
 
 Free tier gives roughly 1,000 requests/day plus **5,000 Google-Search-grounded
 prompts/month**, which is what makes unbiased product discovery possible at $0.
@@ -63,7 +90,12 @@ npm run dev
 ```
 
 Open http://localhost:3000, create an account, and you should land on an empty
-wardrobe.
+wardrobe. **Add pieces** takes you to intake.
+
+The first visit to intake downloads the background-removal model — about 44MB,
+cached by the browser afterwards. On a machine with WebGPU a garment takes about
+a second to cut out; without it, the same work runs on the CPU and takes several.
+The header says which one you got.
 
 ## 5. Deploy (optional until Phase 3)
 
