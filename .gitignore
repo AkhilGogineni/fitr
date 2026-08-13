@@ -32,11 +32,17 @@ yarn-error.log*
 
 # env files (can opt-in for committing if needed)
 .env*
+.env.local
 # ...but the template carries no secrets and must be committed.
 !.env.example
 
 # vercel
 .vercel
+
+# graphify — regenerable from source via `graphify update .`, so it's noise in
+# diffs. (Graphify ships a git merge driver for graph.json if you ever decide
+# you'd rather commit it.)
+graphify-out/
 
 # typescript
 *.tsbuildinfo
