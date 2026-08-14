@@ -32,7 +32,27 @@ export type ProductMetadata = {
   material: string | null;
   colors: string[];
   description: string | null;
+  /** How much of the page we could actually read. */
+  reason: ExtractionReason;
 };
+
+/**
+ * Why an import went the way it did.
+ *
+ * "Failed" is too blunt a verdict here. A page can be perfectly reachable and
+ * still carry nothing a parser can use, because the big chains render their
+ * product data in the browser — and that is not the same problem as a dead link,
+ * nor is it fixable by trying again. The client turns each of these into a
+ * different next step, so they have to survive as separate values rather than
+ * collapsing into one error string.
+ */
+export type ExtractionReason =
+  /** Product data and a usable image — nothing more is needed. */
+  | "ok"
+  /** Real HTML, but no `Product` markup and no `og:image` to fall back on. */
+  | "no-markup"
+  /** Some fields came through, but no picture — the one thing we can't invent. */
+  | "no-image";
 
 type JsonObject = Record<string, unknown>;
 
@@ -269,22 +289,38 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
     .map((color) => text(color, 30))
     .filter((color): color is string => color !== null);
 
+  const priceCents =
+    offer.priceCents ??
+    parsePriceToCents(metaContent(html, "product:price:amount", "og:price:amount"));
+
+  const brand =
+    nameOf(product?.brand) ??
+    nameOf(product?.manufacturer) ??
+    metaContent(html, "og:site_name", "product:brand");
+
+  const title =
+    text(product?.name, 120) ??
+    metaContent(html, "og:title", "twitter:title") ??
+    text(titleTag, 120);
+
+  /*
+   * `no-markup` means the page told us nothing a shopper would recognise. A
+   * `<title>` alone doesn't count — every JavaScript shell has one, and Uniqlo's
+   * is the single word "UNIQLO". The test is whether anything specific to the
+   * product survived into the HTML: structured data, an image, or a price.
+   */
+  const reason: ExtractionReason = imageUrl
+    ? "ok"
+    : product || priceCents !== null || metaContent(html, "og:title")
+      ? "no-image"
+      : "no-markup";
+
   return {
     sourceUrl: pageUrl,
-    title:
-      text(product?.name, 120) ??
-      metaContent(html, "og:title", "twitter:title") ??
-      text(titleTag, 120),
-    brand:
-      nameOf(product?.brand) ??
-      nameOf(product?.manufacturer) ??
-      metaContent(html, "og:site_name", "product:brand"),
+    title,
+    brand,
     imageUrl,
-    priceCents:
-      offer.priceCents ??
-      parsePriceToCents(
-        metaContent(html, "product:price:amount", "og:price:amount"),
-      ),
+    priceCents,
     currency:
       offer.currency ??
       metaContent(html, "product:price:currency", "og:price:currency"),
@@ -293,5 +329,6 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
     description:
       text(product?.description, 400) ??
       metaContent(html, "og:description", "description"),
+    reason,
   };
 }

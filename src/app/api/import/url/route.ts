@@ -53,16 +53,14 @@ export async function POST(request: Request) {
     const html = new TextDecoder("utf-8").decode(page.body);
     const product = extractProduct(html, page.finalUrl);
 
-    if (!product.imageUrl) {
-      return NextResponse.json(
-        {
-          error:
-            "Found the page but no product image on it. Save the photo and add it manually.",
-        },
-        { status: 422 },
-      );
-    }
-
+    /*
+     * A page with no image is not a failed request — it's a page that renders
+     * its product data in the browser, which is how most large chains work.
+     * Answering 200 with whatever was readable lets the client keep the brand
+     * and the price it did find and ask for the one thing missing, instead of
+     * throwing a good import away over a picture the user can paste in a
+     * keystroke.
+     */
     return NextResponse.json({ product });
   } catch (error) {
     if (error instanceof FetchRejected) {

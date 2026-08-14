@@ -42,7 +42,8 @@ src/
       wardrobe/              Gallery of cutouts
         actions.ts           Server Actions: create, correct, confirm, archive
         add/                 Intake — URL import + camera, cutting, review grid
-      outfits/               Phase 2
+      outfits/               Flat-lay canvas; [id]/ is the editor
+        actions.ts           Server Actions: slots, transforms, duplicate, delete
       today/                 Phase 3
       inbox/                 Phase 4
     login/                   Email + password auth
@@ -52,11 +53,13 @@ src/
       import/image/          Relays a product photo (CORS, not convenience)
       tag/                   Vision auto-tagging, key stays server-side
   components/
-    icons.tsx                The six glyphs this app uses, drawn here
+    icons.tsx                The glyphs this app uses, drawn here
+    outfit-preview.tsx       Read-only canvas renderer, shared by list and phone
   lib/
     env.ts                   Env access that fails loudly and early
     garments.ts              Shared vocabulary: categories, seasons, tag coercion
     items.ts                 Row type + the literal select column list
+    outfits.ts               Slot types, canvas coordinate space, layer defaults
     r2.ts                    R2 client, key naming, presigning (server-only)
     intake/
       background-removal.ts  RMBG-1.4 in the browser (client-only)
@@ -150,6 +153,18 @@ surfaces as a wall of "property does not exist" errors nowhere near the cause.
 erase), but a shared constant in `actions.ts` is a build error — which is the
 other reason `lib/items.ts` exists.
 
+**Outfit placement is fractional, never pixels.** `transform` stores `x`/`y` as
+the piece's centre as a fraction of the canvas and `scale` as its width as a
+fraction of canvas width. One renderer then draws the same composition in a
+180px thumbnail, in the editor, and on a phone — and Phase 3 gets it for free.
+Storing pixels would pin an outfit to whatever window it was built in.
+
+**A retailer page with no image is not a failed import.** Most large chains
+render product data in the browser, so a server fetch sees a shell. The route
+answers 200 with `reason: "no-image" | "no-markup"` and whatever it did read; the
+intake card then asks for a paste rather than erroring. Only unreachable hosts
+and non-URLs are 4xx.
+
 **API routes answer 401 rather than redirecting.** The proxy sends signed-out
 page requests to `/login`, but anything under `/api` gets JSON instead: a fetch
 that follows a redirect to an HTML login page reports a parse error, not an
@@ -166,7 +181,9 @@ intermittent logouts that are miserable to track down.
   background removal, auto-tagging, review grid. The exit condition is ~30 real
   garments in the app and a timed comparison of the two paths — that is a
   wardrobe-in-front-of-you job, not a code one.
-- Phase 2 — outfit canvas with gap slots.
+- **Phase 2 — built, awaiting real use.** Flat-lay canvas with drag, resize,
+  rotate, restack and gap slots; duplicate and delete; read-only on a phone. Exit
+  condition is five real outfits, one containing a gap.
 - Phase 3 — "what do I wear today" + wear logging.
 - Phase 4 — capture inbox (iOS Shortcut + browser extension).
 - Phase 5 — discovery.

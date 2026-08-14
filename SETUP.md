@@ -13,9 +13,11 @@ and handling your own credentials.
 2. **Project Settings → API**: copy the **Project URL** and the **anon public** key
    into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
 3. **SQL Editor → New query**: run the migrations in `supabase/migrations` in
-   filename order — `0001_initial_schema.sql`, then `0002_intake.sql`. Paste each
-   file whole and run it. (`0002` adds the `needs_review` flag that intake sets
-   and the review grid clears.)
+   filename order — `0001_initial_schema.sql`, `0002_intake.sql`, then
+   `0003_revoke_anon.sql`. Paste each file whole and run it. (`0002` adds the
+   `needs_review` flag that intake sets and the review grid clears; `0003` closes
+   a grant that `0001` left open — see the isolation check at the foot of this
+   file.)
 4. **Authentication → Sign In / Providers → Email**: turn **Confirm email** *off*.
 
    Why: the free tier's built-in SMTP allows only a couple of emails per hour, so
@@ -116,18 +118,27 @@ is empty even after the first account has items in it.
 Then, in the Supabase SQL editor:
 
 ```sql
--- Expected: "permission denied for table items".
--- anon is granted nothing at all, so it fails at the grant layer before RLS is
--- even consulted. Two independent locks, not one.
+-- Expected after 0003: "permission denied for table items".
+-- Before 0003 this returns 0 instead — which is what prompted that migration.
 set role anon;
 select count(*) from items;
 reset role;
 ```
 
+That `0` was worth chasing down. No rows were ever exposed: every policy is
+`to authenticated`, so an anon caller matches none of them and RLS returns
+nothing. But `0001` only *granted* to `authenticated` and never *revoked* from
+`anon`, and Postgres hands out a default SELECT grant regardless — so the count
+succeeded and returned zero rows rather than being refused outright. One lock was
+doing the work of two. `0003` revokes it, including for tables added later.
+
 Two separate mechanisms are at work and both matter:
 
 - **Grants** decide whether a role may touch a table at all.
 - **RLS** decides which rows it sees once it may.
+
+The grant layer earns its place by failing closed on its own: if a later
+migration adds a table and forgets a policy, the missing grant still refuses.
 
 Supabase changed the default here in May 2026 — new projects no longer expose
 tables to the API automatically. The migration issues the grants explicitly, so

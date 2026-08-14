@@ -85,6 +85,32 @@ export function SpinnerIcon({ className = "size-4" }: { className?: string }) {
   );
 }
 
+export function PlusIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 5v14M5 12h14" />
+    </Svg>
+  );
+}
+
+export function RotateIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M20 12a8 8 0 1 1-2.4-5.7" />
+      <path d="M20 4v4h-4" />
+    </Svg>
+  );
+}
+
+export function ClipboardIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M9 5H7.5A1.5 1.5 0 0 0 6 6.5v12A1.5 1.5 0 0 0 7.5 20h9a1.5 1.5 0 0 0 1.5-1.5v-12A1.5 1.5 0 0 0 16.5 5H15" />
+      <rect x="9" y="3.5" width="6" height="3" rx="1" />
+    </Svg>
+  );
+}
+
 export function AlertIcon(props: IconProps) {
   return (
     <Svg {...props}>

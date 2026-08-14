@@ -1,15 +1,30 @@
 # fitr — wardrobe + shopping, phased build plan
 
-> **Status:** Phases 0 and 1 are built. Phase 1 — URL import, camera intake,
-> in-browser background removal, auto-tagging, review grid — is code-complete and
-> waiting on the part only you can do: ~30 real garments through it, then the
-> timed comparison of pasting versus photographing before committing to the full
-> intake. Phase 2 (outfit builder) is next.
+> **Status:** Phases 0, 1 and 2 are built. Both are waiting on the part only a
+> wardrobe in front of you can settle — ~30 real garments through intake and the
+> timed pasting-versus-photographing comparison, then five real outfits with at
+> least one gap. Phase 3 ("what do I wear today") is next.
 >
-> Four decisions taken during Phase 1 that this document didn't settle: retailer
-> photos are cut out like every other image rather than stored on white; both
-> intake paths auto-tag; rows are written the moment their cutout uploads and
-> carry `needs_review` until checked; CLIP embeddings are deferred to Phase 5.
+> **Decisions this document didn't settle, taken during the build.** Phase 1:
+> retailer photos are cut out like every other image rather than stored on white;
+> both intake paths auto-tag; rows are written the moment their cutout uploads and
+> carry `needs_review` until checked; CLIP embeddings deferred to Phase 5.
+> Phase 2: placement is stored as fractions of the canvas rather than pixels, so
+> one renderer serves the editor, the list thumbnails and the phone — and Phase 3
+> inherits it; a narrow screen gets that read-only renderer instead of a worse
+> touch editor.
+>
+> **One assumption in this plan turned out to be wrong.** Finding 3 below says a
+> retailer's product page yields a clean photo and its metadata. That holds for
+> Shopify-based brands, which server-render it — verified end to end. It does not
+> hold for the large chains, which build the page in the browser, so a server
+> fetch sees an empty shell. URL import now keeps whatever it *can* read and asks
+> for the photo (⌘V), rather than failing. The structural fix is the Phase 4
+> browser extension, which sees the rendered page.
+>
+> A grant bug found while checking isolation is also fixed: `0001` granted the
+> app tables to `authenticated` but never revoked Postgres's default grant from
+> `anon`, so the "two independent locks" claim was one lock. `0003` closes it.
 >
 > For the current build state see [`ARCHITECTURE.md`](../ARCHITECTURE.md); this
 > file is the original phased plan and its rationale. The "greenfield / no

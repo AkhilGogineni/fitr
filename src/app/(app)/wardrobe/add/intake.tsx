@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { AlertIcon, CameraIcon, CheckIcon, LinkIcon, SpinnerIcon } from "@/components/icons";
-import type { GarmentTags } from "@/lib/garments";
+import { formatPrice, type GarmentTags } from "@/lib/garments";
 import {
   preloadCutter,
   removeBackground,
@@ -70,6 +70,10 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
 
   const objectUrls = useRef<string[]>([]);
   const queue = useRef<Promise<unknown>>(Promise.resolve());
+  // Scraped metadata for links still waiting on a photo, keyed by card id. A ref
+  // rather than state: nothing renders from it, and it must survive the re-render
+  // that moving the card into "needs-image" causes.
+  const seeds = useRef<Map<string, Seed>>(new Map());
 
   /**
    * The weights are ~44MB and cached by the browser after the first visit.
@@ -257,6 +261,33 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
         }
 
         const product = payload.product;
+        const seed: Seed = {
+          ...product,
+          hint: [product.brand, product.title].filter(Boolean).join(" ") || null,
+        };
+
+        /*
+         * No image in the markup. The large chains render their product page in
+         * the browser, so a server fetch sees a shell — nothing is broken and
+         * retrying won't help. Keep the brand and price we did get, and ask for
+         * the picture, which is a paste away.
+         */
+        if (!product.imageUrl) {
+          seeds.current.set(id, seed);
+          patchPending(id, {
+            label: product.title ?? label,
+            status: "needs-image",
+            summary: [product.brand, formatPrice(product.priceCents, product.currency)]
+              .filter(Boolean)
+              .join(" · "),
+            detail:
+              product.reason === "no-markup"
+                ? `${label} builds its whole page in the browser, so a fetch from here sees an empty shell.`
+                : `${label} published the details but not the photo — most big shops load images in the browser.`,
+          });
+          return;
+        }
+
         patchPending(id, {
           label: product.title ?? label,
           detail: "Fetching the photo",
@@ -265,7 +296,7 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
         // Through our own origin: a retailer CDN sends no CORS headers, and a
         // tainted canvas can't be read back as a cutout.
         const image = await fetch(
-          `/api/import/image?url=${encodeURIComponent(product.imageUrl!)}`,
+          `/api/import/image?url=${encodeURIComponent(product.imageUrl)}`,
         );
         if (!image.ok) {
           const { error } = (await image.json().catch(() => ({}))) as { error?: string };
@@ -273,13 +304,49 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
           return;
         }
 
-        await process(id, await image.blob(), {
-          ...product,
-          hint: [product.brand, product.title].filter(Boolean).join(" ") || null,
-        });
+        await process(id, await image.blob(), seed);
       });
     }
   }, [enqueue, patchPending, process, urlText]);
+
+  /**
+   * Hands a manually supplied photo to the same pipeline the camera path uses,
+   * carrying the scraped brand, price and source URL with it. There is no
+   * separate "manual import" — only a different way for the bytes to arrive.
+   */
+  const supplyImage = useCallback(
+    (id: string, file: File) => {
+      const seed = seeds.current.get(id) ?? null;
+      seeds.current.delete(id);
+      patchPending(id, { status: "queued", detail: undefined, summary: undefined });
+      enqueue(id, () => process(id, file, seed));
+    },
+    [enqueue, patchPending, process],
+  );
+
+  /**
+   * Paste anywhere on the page fills the oldest card that's waiting for a photo.
+   * Copying an image in the browser and hitting ⌘V is the whole point of the
+   * manual path — without it, importing from a big retailer means downloading a
+   * file, finding it, and uploading it again.
+   */
+  useEffect(() => {
+    function onPaste(event: ClipboardEvent) {
+      const waiting = pending.find((entry) => entry.status === "needs-image");
+      if (!waiting) return;
+
+      const file = [...(event.clipboardData?.files ?? [])].find((entry) =>
+        entry.type.startsWith("image/"),
+      );
+      if (!file) return;
+
+      event.preventDefault();
+      supplyImage(waiting.id, file);
+    }
+
+    window.addEventListener("paste", onPaste);
+    return () => window.removeEventListener("paste", onPaste);
+  }, [pending, supplyImage]);
 
   const save = useCallback(async (id: string, patch: ItemPatch) => {
     setSaving((current) => [...current, id]);
@@ -317,6 +384,8 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
   }, [needsReview]);
 
   const busy = pending.length > 0;
+  // Only one card advertises ⌘V, so it's obvious where a paste will land.
+  const firstWaitingId = pending.find((entry) => entry.status === "needs-image")?.id;
   // Both paths end in the cutter, so a failed model load closes both doors.
   const cutterDown = model.status === "error";
 
@@ -489,7 +558,9 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
                 key={entry.id}
                 entry={entry}
                 ground={ground}
+                receiving={entry.id === firstWaitingId}
                 onDismiss={() => dropPending(entry.id)}
+                onImage={(file) => supplyImage(entry.id, file)}
               />
             ))}
             {items.map((item) => (

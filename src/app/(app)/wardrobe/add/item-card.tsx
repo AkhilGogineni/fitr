@@ -2,7 +2,14 @@
 
 import { useEffect, useRef, useState } from "react";
 
-import { AlertIcon, CheckIcon, LinkIcon, SpinnerIcon, TrashIcon } from "@/components/icons";
+import {
+  AlertIcon,
+  CheckIcon,
+  ClipboardIcon,
+  LinkIcon,
+  SpinnerIcon,
+  TrashIcon,
+} from "@/components/icons";
 import {
   CATEGORIES,
   CATEGORY_LABELS,
@@ -37,11 +44,19 @@ export const GROUND_CLASS: Record<Ground, string> = {
 export type PendingEntry = {
   id: string;
   label: string;
-  status: "queued" | "cutting" | "saving" | "error";
+  /**
+   * `needs-image` is a link whose page was read successfully but rendered its
+   * photo in the browser, so there was nothing for the server to fetch. It is a
+   * waiting state, not a failure: everything scraped is kept and the card asks
+   * for the one missing piece.
+   */
+  status: "queued" | "cutting" | "saving" | "needs-image" | "error";
   detail?: string;
   percent?: number;
   previewUrl?: string;
   error?: string;
+  /** What was scraped, e.g. "Uniqlo · $49.90" — shown while waiting for a photo. */
+  summary?: string;
 };
 
 const inputClass =
@@ -55,13 +70,82 @@ const inputClass =
 export function PendingCard({
   entry,
   ground,
+  receiving,
   onDismiss,
+  onImage,
 }: {
   entry: PendingEntry;
   ground: Ground;
+  /** True for the one waiting card a paste will land in, so ⌘V is advertised once. */
+  receiving?: boolean;
   onDismiss: () => void;
+  /** Supplies the photo a `needs-image` card is waiting for. */
+  onImage: (file: File) => void;
 }) {
   const failed = entry.status === "error";
+  const [dragging, setDragging] = useState(false);
+
+  if (entry.status === "needs-image") {
+    return (
+      <li className="animate-rise rounded-card border border-line-strong bg-surface p-3 shadow-card">
+        <label
+          onDragOver={(event) => {
+            event.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(event) => {
+            event.preventDefault();
+            setDragging(false);
+            const file = [...event.dataTransfer.files].find((f) =>
+              f.type.startsWith("image/"),
+            );
+            if (file) onImage(file);
+          }}
+          className={`flex aspect-square cursor-pointer flex-col items-center justify-center gap-1.5 rounded border border-dashed px-3 text-center transition-colors ${
+            dragging
+              ? "border-line-strong bg-surface-sunk text-ink"
+              : "border-line-strong text-ink-muted hover:text-ink"
+          }`}
+        >
+          <input
+            type="file"
+            accept="image/*"
+            className="sr-only"
+            onChange={(event) => {
+              const file = event.target.files?.[0];
+              if (file) onImage(file);
+              event.target.value = "";
+            }}
+          />
+          <ClipboardIcon className="size-5" />
+          <span className="text-sm text-ink">
+            {receiving ? "Paste the photo — ⌘V" : "Needs a photo"}
+          </span>
+          <span className="text-xs leading-relaxed">
+            Drop or click to choose one
+          </span>
+        </label>
+
+        <p className="mt-2.5 truncate text-sm" title={entry.label}>
+          {entry.label}
+        </p>
+        {entry.summary ? (
+          <p className="label mt-0.5 truncate">{entry.summary}</p>
+        ) : null}
+        <p className="mt-1.5 text-xs leading-relaxed text-ink-muted">
+          {entry.detail}
+        </p>
+        <button
+          type="button"
+          onClick={onDismiss}
+          className="mt-2 w-full rounded-card border border-line py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+        >
+          Skip this one
+        </button>
+      </li>
+    );
+  }
 
   return (
     <li className="animate-rise rounded-card border border-line bg-surface p-3 shadow-card">
