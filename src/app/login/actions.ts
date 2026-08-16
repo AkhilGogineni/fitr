@@ -19,7 +19,7 @@ export async function signIn(
 ): Promise<AuthState> {
   const email = String(formData.get("email") ?? "").trim();
   const password = String(formData.get("password") ?? "");
-  const next = String(formData.get("next") ?? "/wardrobe");
+  const next = String(formData.get("next") ?? "/today");
 
   if (!email || !password) {
     return { error: "Email and password are both required." };
@@ -33,7 +33,7 @@ export async function signIn(
   }
 
   // Only follow relative paths — an absolute URL here would be an open redirect.
-  redirect(next.startsWith("/") ? next : "/wardrobe");
+  redirect(next.startsWith("/") ? next : "/today");
 }
 
 export async function signUp(
@@ -55,7 +55,7 @@ export async function signUp(
   }
 
   // With email confirmation disabled (see SETUP.md) signUp also signs you in.
-  redirect("/wardrobe");
+  redirect("/today");
 }
 
 export async function signOut() {

@@ -12,13 +12,22 @@ and handling your own credentials.
 1. Create a project at [supabase.com](https://supabase.com) (free tier, 2 projects allowed).
 2. **Project Settings → API**: copy the **Project URL** and the **anon public** key
    into `.env.local` as `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY`.
-3. **SQL Editor → New query**: run the migrations in `supabase/migrations` in
-   filename order — `0001_initial_schema.sql`, `0002_intake.sql`, then
-   `0003_revoke_anon.sql`. Paste each file whole and run it. (`0002` adds the
-   `needs_review` flag that intake sets and the review grid clears; `0003` closes
-   a grant that `0001` left open — see the isolation check at the foot of this
-   file.)
-4. **Authentication → Sign In / Providers → Email**: turn **Confirm email** *off*.
+3. **Project Settings → API**: also copy the **service_role** key into
+   `.env.local` as `SUPABASE_SERVICE_ROLE_KEY`. It bypasses RLS entirely, so it
+   never gets a `NEXT_PUBLIC_` prefix and never goes near a Client Component.
+   Exactly two routes use it, both because their callers have no session to act
+   as: `/api/capture` (an iOS Shortcut with a bearer token) and
+   `/api/cron/prices` (a scheduled job acting for nobody).
+4. **SQL Editor → New query**: run the migrations in `supabase/migrations` in
+   filename order — `0001_initial_schema.sql`, `0002_intake.sql`,
+   `0003_revoke_anon.sql`, then `0004_daily_capture_watch.sql`. Paste each file
+   whole and run it.
+   - `0002` adds the `needs_review` flag that intake sets and the review grid clears.
+   - `0003` closes a grant that `0001` left open — see the isolation check at the
+     foot of this file.
+   - `0004` adds the daily suggestion log, the capture token, push subscriptions,
+     and the columns discovery and the price watch need.
+5. **Authentication → Sign In / Providers → Email**: turn **Confirm email** *off*.
 
    Why: the free tier's built-in SMTP allows only a couple of emails per hour, so
    confirmation mail turns signing into your own app into a waiting game. Fine for a
@@ -99,13 +108,91 @@ cached by the browser afterwards. On a machine with WebGPU a garment takes about
 a second to cut out; without it, the same work runs on the CPU and takes several.
 The header says which one you got.
 
-## 5. Deploy (optional until Phase 3)
+## 4b. Where you live, and what you'll spend
+
+Two things the app has to be told rather than infer. Open **Settings** once
+you're signed in:
+
+- **Where you live** — type a place, or use the browser's location. Without it
+  the daily suggestion still works, it just can't factor in the weather, and
+  every temperature rule sits out. Stored to four decimal places, roughly a
+  city block.
+- **What you'll pay** — a ceiling per category. Discovery filters against these,
+  so a coat ceiling and a t-shirt ceiling being different is the whole point.
+  Sensible defaults are already in place; adjust and forget.
+
+## 5. Deploy
 
 Import the repo at [vercel.com](https://vercel.com) on the Hobby plan and paste the
 same environment variables into **Project Settings → Environment Variables**.
 
 Worth doing before Phase 3 — the daily "what do I wear today" screen is a phone
-feature, and it wants a real URL.
+feature, and it wants a real URL. The share sheet, the browser extension and the
+price cron all need one too.
+
+## 6. The share sheet and the extension
+
+Both are set up from [`docs/CAPTURE.md`](docs/CAPTURE.md), and both need a
+capture token from **Settings → Capture token**. Ten minutes for the iOS
+Shortcut, three for the extension.
+
+The extension is worth doing even if the Shortcut isn't: it reads the *rendered*
+page, which is the only thing that works on the large chains that build their
+product pages in the browser.
+
+## 7. The price cron
+
+The daily price check runs from GitHub Actions rather than Vercel Cron — 2,000
+free minutes a month against Hobby's two jobs, and it keeps the Supabase free
+tier from pausing after seven idle days as a side effect.
+
+1. Make a secret:
+
+   ```bash
+   openssl rand -base64 32
+   ```
+
+2. Set it as `CRON_SECRET` **in both places** — Vercel's environment variables
+   and the repo's **Settings → Secrets and variables → Actions**. They have to
+   match; the route compares them.
+3. Add a second repository secret `APP_URL`, your deployed address
+   (`https://your-app.vercel.app`, no trailing slash).
+4. **Actions → Price watch → Run workflow** to try it without waiting a day.
+
+Check it's wired up at any time:
+
+```bash
+curl https://YOUR-APP.vercel.app/api/cron/prices
+# {"ok":true,"push":true,"message":"Ready. POST here with the cron secret to run a check."}
+```
+
+`ok: false` means `CRON_SECRET` isn't set on the deployment. `push: false` means
+notifications aren't configured, which is fine — drops still land on `/watch`.
+
+## 8. Push notifications (optional)
+
+Skip this and nothing breaks. Every price drop appears on `/watch` either way;
+this only adds the interruption.
+
+```bash
+npx web-push generate-vapid-keys
+```
+
+Put the pair in the environment as `NEXT_PUBLIC_VAPID_PUBLIC_KEY` and
+`VAPID_PRIVATE_KEY`, plus `VAPID_SUBJECT=mailto:you@example.com` — a contact
+address the push services use if your notifications start misbehaving. The
+public key is public by necessity: the browser needs it to subscribe.
+
+Then **Settings → Price alerts → Enable notifications**.
+
+> **On iPhone there's one more step and it isn't optional.** Safari won't
+> deliver a push to a website. Open fitr in Safari → **Share → Add to Home
+> Screen**, open it *from that icon*, and enable notifications there. From
+> Safari itself the button never appears, because the Push API isn't present —
+> Settings says so when it detects an iPhone.
+
+Rotating the VAPID keys invalidates every existing subscription, and each device
+has to be re-enabled. Generate them once.
 
 ---
 

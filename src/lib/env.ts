@@ -42,6 +42,15 @@ export const publicEnv = {
       process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
     );
   },
+  /**
+   * VAPID public key, or null. Unlike the two above this is optional and so
+   * doesn't go through `required()` — push notifications are opt-in and the app
+   * is fully usable without them. The browser needs this value to subscribe,
+   * which is why it's public; the matching private key never leaves the server.
+   */
+  get NEXT_PUBLIC_VAPID_PUBLIC_KEY(): string | null {
+    return process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY || null;
+  },
 };
 
 /**
@@ -66,4 +75,49 @@ export function serverEnv() {
       process.env.R2_PUBLIC_BASE_URL,
     ),
   };
+}
+
+/**
+ * The Supabase service-role key.
+ *
+ * Separate from `serverEnv()` on purpose. That function is called on every
+ * upload and would start throwing for every user of R2 the moment this key was
+ * absent, even though only two routes in the app need it — the capture endpoint
+ * and the price cron, neither of which has a signed-in user to act as.
+ *
+ * This key bypasses RLS entirely. It must never be `NEXT_PUBLIC_`, never be
+ * imported from a Client Component, and never be used by a path that has a
+ * session available instead.
+ */
+export function serviceRoleKey() {
+  return required(
+    "SUPABASE_SERVICE_ROLE_KEY",
+    process.env.SUPABASE_SERVICE_ROLE_KEY,
+  );
+}
+
+/**
+ * The shared secret the price cron presents.
+ *
+ * `/api/cron/prices` is a public URL with no session behind it, so this is the
+ * only thing standing between a scheduled job and anyone who guesses the path.
+ */
+export function cronSecret() {
+  return required("CRON_SECRET", process.env.CRON_SECRET);
+}
+
+/**
+ * VAPID keypair for Web Push, or null when push isn't set up.
+ *
+ * Null is a supported state, not a misconfiguration: notifications are opt-in,
+ * and the whole price watch works without them — the drops still land on the
+ * watch page. So this returns null rather than throwing, and every caller is
+ * expected to carry on.
+ */
+export function vapidKeys() {
+  const publicKey = process.env.NEXT_PUBLIC_VAPID_PUBLIC_KEY;
+  const privateKey = process.env.VAPID_PRIVATE_KEY;
+  const subject = process.env.VAPID_SUBJECT;
+  if (!publicKey || !privateKey || !subject) return null;
+  return { publicKey, privateKey, subject };
 }

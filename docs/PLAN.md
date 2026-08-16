@@ -1,9 +1,10 @@
 # fitr — wardrobe + shopping, phased build plan
 
-> **Status:** Phases 0, 1 and 2 are built. Both are waiting on the part only a
-> wardrobe in front of you can settle — ~30 real garments through intake and the
-> timed pasting-versus-photographing comparison, then five real outfits with at
-> least one gap. Phase 3 ("what do I wear today") is next.
+> **Status: every phase is built.** 0 through 6, code-complete. What remains is
+> entirely the part only a wardrobe and a week of mornings can settle — ~30 real
+> garments through intake, the timed pasting-versus-photographing comparison,
+> five real outfits with a gap, five consecutive mornings of the daily screen,
+> and ten real captures run through discovery and scored by hand.
 >
 > **Decisions this document didn't settle, taken during the build.** Phase 1:
 > retailer photos are cut out like every other image rather than stored on white;
@@ -13,6 +14,52 @@
 > one renderer serves the editor, the list thumbnails and the phone — and Phase 3
 > inherits it; a narrow screen gets that read-only renderer instead of a worse
 > touch editor.
+>
+> **Phases 3–6, decided in one interview before any of it was written.**
+>
+> *Phase 3 is rules **and** a model, not one or the other.* A scoring engine
+> decides what is wearable and hands a shortlist of ten to Gemini, which picks
+> one and writes the sentence — because rules are good at ruling things out and
+> mediocre at choosing a favourite among ten reasonable options. Any failure at
+> all falls back to the engine's own top pick, so the screen that has to work
+> every morning never depends on a free tier's mood. The rulebook the engine
+> evaluates was assembled from a survey of styling sources rather than invented,
+> and its weights track how much those sources actually agreed: unanimous rules
+> are large, contested ones are ±1 on purpose.
+>
+> *A page load never composes.* The first visit of the day writes a `suggestions`
+> row and every refresh reads it back. That table also exists because the exit
+> criterion is an acceptance rate, and `wears` records what was worn while being
+> silent about what was turned down.
+>
+> *Phase 5 matches on attributes, and CLIP stays deferred — now indefinitely.*
+> The `embedding` column and its index remain empty. At thirty to three hundred
+> garments, "charcoal trousers at formality 3 go with this" beats a cosine
+> distance and, more to the point, can be explained — and the explanation is most
+> of the value, since the answer is meant to change a purchase. The revisit point
+> is written into `lib/discovery/fit.ts`.
+>
+> *Every discovered URL is fetched before it is stored.* A grounded model still
+> invents plausible product links. Verification drops the dead ones, takes the
+> price from the page rather than the model, and marks a page with no structured
+> price `unwatchable` — which is also what makes Phase 6 possible, because a
+> stored match is already known to be readable.
+>
+> *Phase 4's two clients share one credential.* An iOS Shortcut cannot hold a
+> Supabase session, so both it and the browser extension present a `fitr_…` token
+> minted in Settings. One mechanism, revocable in one click.
+>
+> *Phase 6 is in-app first, push second.* The cron, the JSON-LD parse and the
+> observations are the load-bearing parts and run regardless; notifications are
+> an opt-in button, because on iOS they only work from a home-screen install and
+> a design where the drop exists *only* as a notification fails silently for most
+> of its life.
+>
+> **A bug found and fixed in passing.** The proxy listed `/api/capture` as
+> reachable while signed out, but checked "no session under `/api/` → 401" first
+> — so the bearer-token endpoint would have rejected every request it exists to
+> serve, before its handler ran. The public check now comes first, and the two
+> self-authenticating routes are named as such.
 >
 > **One assumption in this plan turned out to be wrong.** Finding 3 below says a
 > retailer's product page yields a clean photo and its metadata. That holds for
@@ -288,9 +335,20 @@ target.
 
 ## Open items (not blocking)
 
-1. **Home location** for weather — needed at Phase 3, one profile field.
-2. **Per-category price ceilings** — needed at Phase 5; I'll seed defaults and you adjust.
-3. **iOS Shortcut distribution** — needs a signed iCloud link; setup docs to follow.
-4. **Gemini free-tier data use** — accepted for now; provider-agnostic interface keeps the
-   switch to a paid key cheap.
-5. **Domain** — Vercel subdomain to start.
+1. ~~**Home location** for weather~~ — settled: a field in Settings, typed as a
+   place name and geocoded by Open-Meteo (also keyless), or taken from the
+   browser. Without it the daily screen still works, minus every weather rule.
+2. ~~**Per-category price ceilings**~~ — settled: defaults seeded in
+   `lib/profile.ts`, editable in Settings, enforced as a filter in the discovery
+   ranker rather than as a penalty.
+3. ~~**iOS Shortcut distribution**~~ — settled, and simpler than expected: no
+   signed iCloud link needed, because the Shortcut is four steps you build once.
+   The recipe, and a table of what each failure message means, is in
+   [`docs/CAPTURE.md`](CAPTURE.md).
+4. **Gemini free-tier data use** — still accepted. The tagger sits behind
+   `GarmentTagger`, and the daily pick and discovery each call it from one file,
+   so switching to a paid key or a local model stays a small change. Raised again
+   by the "how do I do this without paying Gemini" question, which is a
+   conversation still to have.
+5. **Domain** — Vercel subdomain to start. Now also the value the extension and
+   the Shortcut are configured with, so changing it later means updating both.

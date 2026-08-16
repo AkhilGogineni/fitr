@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "fitr",
+  "version": "1.0.0",
+  "description": "Save a piece to your fitr inbox from any page — including the ones a server can't read.",
+
+  "permissions": ["storage", "activeTab", "scripting", "contextMenus", "notifications"],
+
+  "optional_host_permissions": ["*://*/*"],
+
+  "background": { "service_worker": "background.js", "type": "module" },
+
+  "action": {
+    "default_title": "Save to fitr",
+    "default_popup": "popup.html",
+    "default_icon": { "128": "icon-192.png" }
+  },
+
+  "options_ui": { "page": "options.html", "open_in_tab": true },
+
+  "icons": { "128": "icon-192.png", "512": "icon-512.png" }
+}

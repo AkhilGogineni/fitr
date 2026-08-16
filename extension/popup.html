@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Save to fitr</title>
+    <style>
+      /*
+       * The same tokens as the app, restated. A popup is a separate document
+       * with no access to the site's stylesheet, so the choice is either to
+       * duplicate a dozen values or to have the extension look like a different
+       * product. Twelve lines is the cheaper of the two.
+       */
+      :root {
+        --paper: #faf9f7;
+        --surface: #ffffff;
+        --ink: #1a1917;
+        --ink-muted: #6b6862;
+        --line: #e6e3de;
+        --accent: #1a1917;
+        --accent-ink: #faf9f7;
+        --danger: #a13d2d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #131211;
+          --surface: #1c1b19;
+          --ink: #f0eeea;
+          --ink-muted: #9d9890;
+          --line: #2c2a27;
+          --accent: #f0eeea;
+          --accent-ink: #131211;
+          --danger: #d97a66;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        width: 300px;
+        margin: 0;
+        padding: 14px;
+        background: var(--paper);
+        color: var(--ink);
+        font: 13px/1.45 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      h1 { margin: 0 0 2px; font-size: 13px; font-weight: 600; letter-spacing: -0.01em; }
+      p { margin: 0; color: var(--ink-muted); }
+      #page { margin-top: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+      button {
+        width: 100%;
+        margin-top: 12px;
+        padding: 9px 12px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      button:disabled { opacity: 0.5; cursor: default; }
+      #note {
+        width: 100%;
+        margin-top: 8px;
+        padding: 7px 9px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit;
+        resize: none;
+      }
+      #status { margin-top: 10px; }
+      #status.error { color: var(--danger); }
+      a { color: var(--ink-muted); font-size: 11px; }
+    </style>
+  </head>
+  <body>
+    <h1>Save to fitr</h1>
+    <p id="page">Reading this page…</p>
+
+    <textarea id="note" rows="2" placeholder="A note, optional"></textarea>
+    <button id="save" type="button">Save it</button>
+
+    <p id="status"></p>
+    <p style="margin-top: 10px"><a href="#" id="options">Settings</a></p>
+
+    <script src="popup.js" type="module"></script>
+  </body>
+</html>

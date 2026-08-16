@@ -3,11 +3,23 @@ import { NextResponse, type NextRequest } from "next/server";
 
 import { publicEnv } from "@/lib/env";
 
-/** Routes reachable while signed out. Everything else redirects to /login. */
-const PUBLIC_PREFIXES = ["/login", "/auth", "/api/capture"];
+/** Pages reachable while signed out. Everything else redirects to /login. */
+const PUBLIC_PREFIXES = ["/login", "/auth"];
 
-function isPublic(pathname: string) {
-  return PUBLIC_PREFIXES.some(
+/**
+ * API routes that carry their own credential, and must be left alone.
+ *
+ * These are not holes in the auth model — they are the two callers that cannot
+ * hold a cookie. `/api/capture` is an iOS Shortcut and a browser extension
+ * presenting a bearer token minted in Settings; `/api/cron` is a scheduled job
+ * presenting a shared secret. Each checks its credential as the first thing it
+ * does, and each would be permanently unreachable if the blanket `/api/` rule
+ * below saw it first — which is exactly the bug this list exists to prevent.
+ */
+const SELF_AUTHENTICATING = ["/api/capture", "/api/cron"];
+
+function matches(pathname: string, prefixes: string[]) {
+  return prefixes.some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -55,26 +67,30 @@ export async function updateSession(request: NextRequest) {
 
   const { pathname } = request.nextUrl;
 
-  // API routes answer for themselves. Redirecting one to /login sends an HTML
-  // page to a caller expecting JSON, so a session that expires mid-import
-  // surfaces as an unparseable response instead of "not signed in". Every
-  // handler under /api checks `getUser()` first, so nothing is loosened here.
+  // Checked first, and the order is load-bearing: these routes authenticate
+  // themselves, so the blanket `/api/` 401 below must never see them.
+  if (matches(pathname, SELF_AUTHENTICATING)) return response;
+
+  if (user && pathname === "/login") {
+    const url = request.nextUrl.clone();
+    url.pathname = "/today";
+    url.search = "";
+    return NextResponse.redirect(url);
+  }
+
+  // Every other API route answers for itself. Redirecting one to /login sends
+  // an HTML page to a caller expecting JSON, so a session that expires mid
+  // import surfaces as an unparseable response instead of "not signed in".
+  // Each handler still checks `getUser()`, so nothing is loosened here.
   if (!user && pathname.startsWith("/api/")) {
     return NextResponse.json({ error: "Not signed in" }, { status: 401 });
   }
 
-  if (!user && !isPublic(pathname)) {
+  if (!user && !matches(pathname, PUBLIC_PREFIXES)) {
     const url = request.nextUrl.clone();
     url.pathname = "/login";
     // Preserve where they were headed so login can bounce them back.
     url.searchParams.set("next", pathname);
-    return NextResponse.redirect(url);
-  }
-
-  if (user && pathname === "/login") {
-    const url = request.nextUrl.clone();
-    url.pathname = "/wardrobe";
-    url.search = "";
     return NextResponse.redirect(url);
   }
 

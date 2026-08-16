@@ -91,6 +91,35 @@ export async function createUploadUrl(key: string, contentType: string) {
   );
 }
 
+/**
+ * Uploads from the server.
+ *
+ * The presigned-URL path above exists so image bytes never touch Vercel, and
+ * that remains the rule for intake. This is the exception the capture endpoint
+ * needs: an iOS Shortcut can't be handed a presigned URL and told to make a
+ * second request — the share sheet gets one shot, and a two-step upload from a
+ * Shortcut is a Shortcut nobody finishes configuring. So a capture's image
+ * arrives inline and is relayed from here.
+ *
+ * Bounded by the caller. A capture is a phone screenshot, not a RAW file.
+ */
+export async function putObject(
+  key: string,
+  body: Uint8Array,
+  contentType: string,
+) {
+  const env = serverEnv();
+  await r2().send(
+    new PutObjectCommand({
+      Bucket: env.R2_BUCKET,
+      Key: key,
+      Body: body,
+      ContentType: contentType,
+    }),
+  );
+  return key;
+}
+
 /** Public read URL for a stored object. */
 export function publicUrlFor(key: string) {
   const base = serverEnv().R2_PUBLIC_BASE_URL.replace(/\/$/, "");

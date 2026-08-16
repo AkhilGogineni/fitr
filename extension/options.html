@@ -1,0 +1,92 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>fitr — settings</title>
+    <style>
+      :root {
+        --paper: #faf9f7;
+        --surface: #ffffff;
+        --ink: #1a1917;
+        --ink-muted: #6b6862;
+        --line: #e6e3de;
+        --accent: #1a1917;
+        --accent-ink: #faf9f7;
+        --danger: #a13d2d;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --paper: #131211;
+          --surface: #1c1b19;
+          --ink: #f0eeea;
+          --ink-muted: #9d9890;
+          --line: #2c2a27;
+          --accent: #f0eeea;
+          --accent-ink: #131211;
+          --danger: #d97a66;
+        }
+      }
+      * { box-sizing: border-box; }
+      body {
+        max-width: 520px;
+        margin: 48px auto;
+        padding: 0 20px;
+        background: var(--paper);
+        color: var(--ink);
+        font: 14px/1.55 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+      }
+      h1 { font-size: 18px; letter-spacing: -0.02em; margin: 0 0 4px; }
+      p.lede { margin: 0 0 28px; color: var(--ink-muted); }
+      label { display: block; margin-top: 18px; }
+      label span { display: block; font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-muted); margin-bottom: 5px; }
+      input {
+        width: 100%;
+        padding: 9px 11px;
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        background: var(--surface);
+        color: var(--ink);
+        font: inherit;
+      }
+      small { display: block; margin-top: 5px; color: var(--ink-muted); font-size: 12px; }
+      button {
+        margin-top: 24px;
+        padding: 9px 16px;
+        border: 0;
+        border-radius: 8px;
+        background: var(--accent);
+        color: var(--accent-ink);
+        font: inherit;
+        font-weight: 500;
+        cursor: pointer;
+      }
+      #status { margin-top: 14px; color: var(--ink-muted); }
+      #status.error { color: var(--danger); }
+    </style>
+  </head>
+  <body>
+    <h1>fitr</h1>
+    <p class="lede">
+      Two things, once. Both come from the Settings page in fitr itself.
+    </p>
+
+    <label>
+      <span>Your fitr address</span>
+      <input id="baseUrl" type="url" placeholder="https://fitr.vercel.app" />
+      <small>Where the app is deployed. No trailing slash needed.</small>
+    </label>
+
+    <label>
+      <span>Capture token</span>
+      <input id="token" type="text" placeholder="fitr_…" spellcheck="false" />
+      <small>
+        From Settings → Capture token. It can only add things to your inbox.
+      </small>
+    </label>
+
+    <button id="save" type="button">Save and test</button>
+    <p id="status"></p>
+
+    <script src="options.js" type="module"></script>
+  </body>
+</html>

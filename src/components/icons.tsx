@@ -120,3 +120,75 @@ export function AlertIcon(props: IconProps) {
     </Svg>
   );
 }
+
+export function XIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6.5 6.5l11 11" />
+      <path d="M17.5 6.5l-11 11" />
+    </Svg>
+  );
+}
+
+export function SunIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="4" />
+      <path d="M12 3v2M12 19v2M3 12h2M19 12h2M5.6 5.6l1.4 1.4M17 17l1.4 1.4M18.4 5.6L17 7M7 17l-1.4 1.4" />
+    </Svg>
+  );
+}
+
+export function CloudRainIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M7 15.5a3.75 3.75 0 0 1 .3-7.5 5.25 5.25 0 0 1 10 1.2A3.4 3.4 0 0 1 17 15.5H7z" />
+      <path d="M9 18.5l-.8 2M13 18.5l-.8 2M17 18.5l-.8 2" />
+    </Svg>
+  );
+}
+
+export function BellIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M6.5 9.5a5.5 5.5 0 0 1 11 0c0 4 1.3 5.4 1.8 5.9a.55.55 0 0 1-.38.94H5.08a.55.55 0 0 1-.38-.94c.5-.5 1.8-1.9 1.8-5.9z" />
+      <path d="M10 19.2a2.2 2.2 0 0 0 4 0" />
+    </Svg>
+  );
+}
+
+export function InboxIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M3.5 13.5h4l1.2 2.2h6.6l1.2-2.2h4" />
+      <path d="M5.6 5h12.8l2.1 8.5v4a1.5 1.5 0 0 1-1.5 1.5h-14a1.5 1.5 0 0 1-1.5-1.5v-4z" />
+    </Svg>
+  );
+}
+
+export function SearchIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="11" cy="11" r="6.5" />
+      <path d="M15.8 15.8l4 4" />
+    </Svg>
+  );
+}
+
+export function TrendDownIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M4 7.5l6 6 3.5-3.5L20 16.5" />
+      <path d="M20 11.5v5h-5" />
+    </Svg>
+  );
+}
+
+export function SparkIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z" />
+      <path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </Svg>
+  );
+}

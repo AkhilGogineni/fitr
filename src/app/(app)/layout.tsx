@@ -6,10 +6,11 @@ import { signOut } from "@/app/login/actions";
 import { getUser } from "@/lib/supabase/server";
 
 const NAV = [
+  { href: "/today", label: "Today" },
   { href: "/wardrobe", label: "Wardrobe" },
   { href: "/outfits", label: "Outfits" },
-  { href: "/today", label: "Today" },
   { href: "/inbox", label: "Inbox" },
+  { href: "/watch", label: "Watch" },
 ] as const;
 
 /**
@@ -43,14 +44,22 @@ export default async function AppLayout({ children }: { children: ReactNode }) {
             ))}
           </nav>
 
-          <form action={signOut} className="ml-auto">
-            <button
-              type="submit"
+          <div className="ml-auto flex items-center gap-4">
+            <Link
+              href="/settings"
               className="text-xs text-ink-faint transition-colors hover:text-ink"
             >
-              Sign out
-            </button>
-          </form>
+              Settings
+            </Link>
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="text-xs text-ink-faint transition-colors hover:text-ink"
+              >
+                Sign out
+              </button>
+            </form>
+          </div>
         </div>
       </header>
 

@@ -1,0 +1,62 @@
+name: Price watch
+
+# The daily price check.
+#
+# GitHub Actions rather than Vercel Cron for two reasons. It's 2,000 free
+# minutes a month against Hobby's two jobs, and — the useful one — this also
+# keeps the Supabase free tier awake. Supabase pauses a project after seven idle
+# days, and a paused database is a dead app on the Monday you finally open it.
+# A daily request that touches Postgres prevents that as a side effect.
+#
+# The job itself does nothing but make one authenticated request. All the work
+# is in `/api/cron/prices`, which means it can be run by hand with curl, tested
+# locally, and debugged without touching CI.
+#
+# Two repository secrets are needed (Settings → Secrets and variables → Actions):
+#   APP_URL      https://your-deployment.vercel.app
+#   CRON_SECRET  the same value set in the Vercel environment
+
+on:
+  schedule:
+    # 07:15 UTC. Deliberately not on the hour: GitHub's scheduler queues heavily
+    # at :00 and a job can be delayed by tens of minutes, which for a daily
+    # price check is fine but makes "did it run?" harder to answer.
+    - cron: "15 7 * * *"
+  # So a failure can be re-run, and so the very first run doesn't wait a day.
+  workflow_dispatch:
+
+jobs:
+  check-prices:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check watched prices
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          CRON_SECRET: ${{ secrets.CRON_SECRET }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${APP_URL:-}" ] || [ -z "${CRON_SECRET:-}" ]; then
+            echo "APP_URL and CRON_SECRET must both be set as repository secrets."
+            exit 1
+          fi
+
+          # --fail-with-body so a non-2xx exits non-zero AND still prints what
+          # the server said. Plain --fail hides the body, which is the only part
+          # that explains the failure.
+          response=$(curl --silent --show-error --fail-with-body \
+            --max-time 120 \
+            --request POST \
+            --header "Authorization: Bearer ${CRON_SECRET}" \
+            --header "Content-Length: 0" \
+            "${APP_URL%/}/api/cron/prices")
+
+          echo "$response"
+
+          # Surface the counts in the run summary, so the history of this
+          # workflow is a readable log of what the watch has been doing.
+          echo "### Price watch" >> "$GITHUB_STEP_SUMMARY"
+          echo '```json' >> "$GITHUB_STEP_SUMMARY"
+          echo "$response" >> "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
