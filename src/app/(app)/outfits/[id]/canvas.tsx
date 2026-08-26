@@ -33,6 +33,7 @@ import {
   updateOutfit,
   updateSlotTransform,
 } from "../actions";
+import { btnPrimary, pillClass } from "@/lib/ui";
 
 /**
  * The outfit canvas.
@@ -364,13 +365,15 @@ export function OutfitCanvas({
   if (readOnly) {
     return (
       <div className="mx-auto max-w-sm">
-        <OutfitPreview slots={slots} className="border border-line bg-surface" />
+        <div className="animate-rise rounded-card border border-line bg-surface p-3 shadow-lift">
+          <OutfitPreview slots={slots} />
+        </div>
         <p className="mt-3 text-sm">{name || "Untitled outfit"}</p>
-        <p className="label mt-0.5">
+        <p className="label nums mt-0.5">
           {occasion ? OCCASION_LABELS[occasion] : "No occasion"}
           {gapCount > 0 ? ` · ${gapCount} gap${gapCount === 1 ? "" : "s"}` : ""}
         </p>
-        <p className="mt-4 text-xs leading-relaxed text-ink-muted">
+        <p className="mt-4 font-mono text-xs leading-relaxed text-ink-muted">
           Arranging an outfit wants a pointer and room to work, so editing lives on
           the laptop. This is the view.
         </p>
@@ -388,7 +391,7 @@ export function OutfitCanvas({
             onBlur={() => saveMeta({ name })}
             placeholder="Name this outfit"
             aria-label="Outfit name"
-            className="w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium outline-none transition-colors placeholder:text-ink-muted hover:border-line focus:border-line-strong"
+            className="w-full rounded-control border border-transparent bg-transparent px-1.5 py-1 text-sm font-medium outline-none transition-colors placeholder:text-ink-muted hover:border-line focus:border-copper"
           />
 
           <div className="mt-2 flex flex-wrap gap-1" role="group" aria-label="Occasion">
@@ -402,11 +405,7 @@ export function OutfitCanvas({
                   setOccasion(next);
                   void saveMeta({ occasion: next });
                 }}
-                className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                  occasion === value
-                    ? "bg-accent text-accent-ink"
-                    : "bg-surface-sunk text-ink-muted hover:text-ink"
-                }`}
+                className={pillClass}
               >
                 {OCCASION_LABELS[value]}
               </button>
@@ -427,11 +426,7 @@ export function OutfitCanvas({
                   setSeasons(next);
                   void saveMeta({ seasons: next });
                 }}
-                className={`rounded-full px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide transition-colors ${
-                  seasons.includes(season)
-                    ? "bg-accent text-accent-ink"
-                    : "bg-surface-sunk text-ink-muted hover:text-ink"
-                }`}
+                className={`${pillClass} px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wide`}
               >
                 {SEASON_LABELS[season].slice(0, 3)}
               </button>
@@ -481,7 +476,7 @@ export function OutfitCanvas({
                     type="button"
                     onClick={() => void addPiece(pick)}
                     title={pick.label}
-                    className="w-full rounded border border-line bg-surface-sunk p-1 transition-colors hover:border-line-strong"
+                    className="w-full rounded-control border border-line bg-surface-sunk p-1 transition-[border-color,box-shadow] hover:-translate-y-px hover:border-copper hover:shadow-card"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
@@ -502,7 +497,7 @@ export function OutfitCanvas({
         {banner ? (
           <p
             role="alert"
-            className="mb-3 flex items-start gap-2 rounded-card border border-line bg-surface px-3.5 py-2.5 text-sm text-danger"
+            className="mb-3 flex items-start gap-2 rounded-card border border-line bg-surface px-3.5 py-2.5 text-sm text-danger shadow-card"
           >
             <AlertIcon className="mt-0.5 size-4 shrink-0" />
             {banner}
@@ -515,7 +510,7 @@ export function OutfitCanvas({
           onPointerUp={endDrag}
           onPointerCancel={endDrag}
           onPointerDown={() => setSelectedId(null)}
-          className="relative w-full overflow-hidden rounded-card border border-line bg-surface shadow-card"
+          className="animate-rise relative w-full overflow-hidden rounded-card border border-line bg-surface-sunk shadow-lift"
           style={{ aspectRatio: CANVAS_ASPECT }}
         >
           {slots.length === 0 ? (
@@ -542,8 +537,10 @@ export function OutfitCanvas({
                 >
                   <div
                     onPointerDown={(event) => beginDrag(event, slot, "move")}
-                    className={`cursor-grab active:cursor-grabbing ${
-                      isSelected ? "outline outline-1 outline-offset-4 outline-line-strong" : ""
+                    className={`cursor-grab transition-[outline-color] active:cursor-grabbing ${
+                      isSelected
+                        ? "outline outline-[1.5px] outline-offset-4 outline-dashed outline-copper"
+                        : ""
                     }`}
                   >
                     {slot.imageUrl ? (
@@ -569,15 +566,15 @@ export function OutfitCanvas({
                         type="button"
                         aria-label="Resize"
                         onPointerDown={(event) => beginDrag(event, slot, "scale")}
-                        className="absolute -bottom-2 -right-2 size-4 cursor-nwse-resize rounded-full border border-line-strong bg-surface shadow-card"
+                        className="absolute -bottom-2 -right-2 size-4 cursor-nwse-resize rounded-full border border-copper bg-copper shadow-card transition-transform hover:scale-110"
                       />
                       <button
                         type="button"
                         aria-label="Rotate"
                         onPointerDown={(event) => beginDrag(event, slot, "rotate")}
-                        className="absolute -top-2 -right-2 flex size-4 cursor-grab items-center justify-center rounded-full border border-line-strong bg-surface shadow-card"
+                        className="absolute -top-2 -right-2 flex size-4 cursor-grab items-center justify-center rounded-full border border-copper bg-surface shadow-card transition-transform hover:scale-110"
                       >
-                        <RotateIcon className="size-2.5 text-ink-muted" />
+                        <RotateIcon className="size-2.5 text-copper" />
                       </button>
                     </>
                   ) : null}
@@ -634,14 +631,7 @@ function FilterPill({
   children: React.ReactNode;
 }) {
   return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-        active ? "bg-accent text-accent-ink" : "bg-surface-sunk text-ink-muted hover:text-ink"
-      }`}
-    >
+    <button type="button" aria-pressed={active} onClick={onClick} className={pillClass}>
       {children}
     </button>
   );
@@ -658,7 +648,7 @@ function ToolbarButton({
     <button
       type="button"
       onClick={onClick}
-      className="rounded-card border border-line px-2 py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+      className="rounded-control border border-line px-2 py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
     >
       {children}
     </button>
@@ -687,7 +677,7 @@ function GapForm({
   const [formality, setFormality] = useState<number | null>(null);
 
   const field =
-    "w-full rounded-sm border border-line bg-surface-sunk px-2 py-1 text-xs outline-none transition-colors placeholder:text-ink-muted focus:border-line-strong";
+    "w-full rounded-control border border-line bg-surface px-2 py-1 text-xs outline-none transition-colors placeholder:text-ink-faint focus:border-copper";
 
   return (
     <div className="mt-2.5 rounded border border-dashed border-line-strong bg-surface-sunk p-2.5">
@@ -729,10 +719,8 @@ function GapForm({
             aria-label={FORMALITY_LABELS[level]}
             aria-pressed={formality === level}
             onClick={() => setFormality(formality === level ? null : level)}
-            className={`size-5 rounded-full text-[0.625rem] transition-colors ${
-              formality === level
-                ? "bg-accent text-accent-ink"
-                : "bg-surface text-ink-muted hover:text-ink"
+            className={`pill size-5 rounded-full text-[0.625rem] ${
+              formality === level ? "" : "bg-surface"
             }`}
           >
             {level}
@@ -751,14 +739,14 @@ function GapForm({
               formality,
             })
           }
-          className="flex-1 rounded-card bg-accent px-3 py-1.5 text-xs font-medium text-accent-ink transition-opacity hover:opacity-90"
+          className={`${btnPrimary} flex-1 px-3 py-1.5 text-xs`}
         >
           Add gap
         </button>
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-card border border-line px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
+          className="rounded-control border border-line px-3 py-1.5 text-xs text-ink-muted transition-colors hover:text-ink"
         >
           Cancel
         </button>

@@ -54,6 +54,14 @@ export function CameraIcon(props: IconProps) {
   );
 }
 
+export function PaperclipIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+    </Svg>
+  );
+}
+
 export function CheckIcon(props: IconProps) {
   return (
     <Svg {...props}>
@@ -189,6 +197,62 @@ export function SparkIcon(props: IconProps) {
     <Svg {...props}>
       <path d="M12 3.5l1.9 5.1 5.1 1.9-5.1 1.9L12 17.5l-1.9-5.1L5 10.5l5.1-1.9z" />
       <path d="M18.5 16.5l.7 1.8 1.8.7-1.8.7-.7 1.8-.7-1.8-1.8-.7 1.8-.7z" />
+    </Svg>
+  );
+}
+
+export function HangerIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M12 7.5a2.25 2.25 0 1 1 2.25-2.25" />
+      <path d="M12 7.5v1.8" />
+      <path d="M12 9.3 3.6 15a1.4 1.4 0 0 0 .84 2.52h15.12A1.4 1.4 0 0 0 20.4 15z" />
+    </Svg>
+  );
+}
+
+export function CalendarIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="4" y="5.5" width="16" height="14.5" rx="1.5" />
+      <path d="M4 10h16M8.5 3.5v3.5M15.5 3.5v3.5" />
+    </Svg>
+  );
+}
+
+export function LayersIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="m12 3.8 8.5 4.4L12 12.6 3.5 8.2z" />
+      <path d="m4.5 12.5 7.5 3.9 7.5-3.9" />
+      <path d="m4.5 16.5 7.5 3.9 7.5-3.9" />
+    </Svg>
+  );
+}
+
+export function EyeIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M2.5 12S6 5.9 12 5.9 21.5 12 21.5 12 18 18.1 12 18.1 2.5 12 2.5 12z" />
+      <circle cx="12" cy="12" r="2.75" />
+    </Svg>
+  );
+}
+
+export function GearIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <circle cx="12" cy="12" r="3" />
+      <path d="M12 2.8v3M12 18.2v3M21.2 12h-3M5.8 12h-3M18.5 5.5l-2.1 2.1M7.6 16.4l-2.1 2.1M18.5 18.5l-2.1-2.1M7.6 7.6 5.5 5.5" />
+    </Svg>
+  );
+}
+
+export function SignOutIcon(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path d="M14 4.5H6.5A1.5 1.5 0 0 0 5 6v12a1.5 1.5 0 0 0 1.5 1.5H14" />
+      <path d="M10.5 12H21M17.5 8.5 21 12l-3.5 3.5" />
     </Svg>
   );
 }

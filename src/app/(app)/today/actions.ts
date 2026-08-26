@@ -3,7 +3,7 @@
 import { refresh } from "next/cache";
 
 import type { ActionResult } from "@/lib/items";
-import { OCCASIONS, type Occasion } from "@/lib/outfits";
+import { OCCASIONS, coerceVibe, type Occasion } from "@/lib/outfits";
 import { buildDailyView } from "@/lib/styling/daily";
 import { createClient, getUser } from "@/lib/supabase/server";
 
@@ -82,11 +82,17 @@ export async function wearIt(suggestionId: string): Promise<ActionResult<number>
  * asks for can't be computed at all. `buildDailyView` marks the standing
  * suggestion overridden before writing its replacement.
  */
-export async function somethingElse(occasion: string): Promise<ActionResult<string>> {
+export async function somethingElse(
+  occasion: string,
+  vibe: string,
+): Promise<ActionResult<string>> {
   const user = await getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
-  const view = await buildDailyView(coerceOccasion(occasion), { recompose: true });
+  const view = await buildDailyView(coerceOccasion(occasion), {
+    recompose: true,
+    vibe: coerceVibe(vibe),
+  });
 
   refresh();
   if (view.blocked) return { ok: false, error: view.blocked };

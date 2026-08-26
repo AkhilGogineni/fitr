@@ -4,6 +4,7 @@ import { useActionState, useState } from "react";
 import { useFormStatus } from "react-dom";
 
 import { type AuthState, signIn, signUp } from "./actions";
+import { btnPrimary, btnTag, inputClass } from "@/lib/ui";
 
 function SubmitButton({ label }: { label: string }) {
   const { pending } = useFormStatus();
@@ -11,7 +12,7 @@ function SubmitButton({ label }: { label: string }) {
     <button
       type="submit"
       disabled={pending}
-      className="w-full rounded-card bg-accent px-4 py-2.5 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+      className={`${btnPrimary} w-full py-2.5`}
     >
       {pending ? "…" : label}
     </button>
@@ -43,7 +44,7 @@ export function LoginForm({ next }: { next: string }) {
             type="email"
             autoComplete="email"
             required
-            className="mt-1.5 w-full rounded-card border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-line-strong"
+            className={`${inputClass} mt-1.5 bg-paper`}
           />
         </div>
 
@@ -60,7 +61,7 @@ export function LoginForm({ next }: { next: string }) {
             }
             required
             minLength={8}
-            className="mt-1.5 w-full rounded-card border border-line bg-surface px-3 py-2 text-sm outline-none focus:border-line-strong"
+            className={`${inputClass} mt-1.5 bg-paper`}
           />
         </div>
 
@@ -76,7 +77,7 @@ export function LoginForm({ next }: { next: string }) {
       <button
         type="button"
         onClick={() => setMode(mode === "signin" ? "signup" : "signin")}
-        className="mt-5 w-full text-center text-xs text-ink-muted underline underline-offset-4 hover:text-ink"
+        className={`${btnTag} mt-5 w-full text-center`}
       >
         {mode === "signin"
           ? "Need an account? Create one"

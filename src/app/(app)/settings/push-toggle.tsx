@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 
 import { BellIcon, CheckIcon } from "@/components/icons";
+import { btnPrimary, btnTag } from "@/lib/ui";
 
 /**
  * Turning price-drop notifications on, and being honest about what that takes.
@@ -158,39 +159,29 @@ export function PushToggle({ vapidPublicKey }: { vapidPublicKey: string | null }
   return (
     <section className="rounded-card border border-line bg-surface p-5 shadow-card">
       <h2 className="flex items-center gap-2 text-sm font-medium">
-        <BellIcon className="size-4" />
+        <BellIcon className="size-4 text-copper" />
         Price alerts
       </h2>
       <p className="mt-1 text-sm text-ink-muted">{explanation[state]}</p>
 
       {state === "off" ? (
-        <button
-          type="button"
-          disabled={busy}
-          onClick={enable}
-          className="mt-4 rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
+        <button type="button" disabled={busy} onClick={enable} className={`${btnPrimary} mt-4`}>
           {busy ? "Enabling…" : "Enable notifications"}
         </button>
       ) : null}
 
       {state === "on" ? (
         <div className="mt-4 flex items-center gap-3">
-          <span className="flex items-center gap-1.5 text-xs text-ink-muted">
-            <CheckIcon className="size-3.5" /> On for this device
+          <span className="flex items-center gap-1.5 font-mono text-xs text-ink-muted">
+            <CheckIcon className="size-3.5 text-copper" /> On for this device
           </span>
-          <button
-            type="button"
-            disabled={busy}
-            onClick={disable}
-            className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50"
-          >
+          <button type="button" disabled={busy} onClick={disable} className={btnTag}>
             Turn off
           </button>
         </div>
       ) : null}
 
-      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+      {error ? <p className="mt-2 font-mono text-xs text-danger">{error}</p> : null}
     </section>
   );
 }

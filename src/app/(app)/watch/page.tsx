@@ -3,9 +3,10 @@ import Link from "next/link";
 import { TrendDownIcon } from "@/components/icons";
 import { MATCH_COLUMNS, type ProductMatchRow } from "@/lib/captures";
 import { formatPrice } from "@/lib/garments";
+import { btnTag } from "@/lib/ui";
 import { createClient } from "@/lib/supabase/server";
 
-export const metadata = { title: "Watch · fitr" };
+export const metadata = { title: "Watch" };
 
 /**
  * Everything being watched, and what its price has done.
@@ -69,8 +70,8 @@ export default async function WatchPage() {
   return (
     <div className="mx-auto max-w-3xl">
       <header className="mb-6">
-        <h1 className="display text-2xl font-medium">Watch</h1>
-        <p className="mt-1 text-sm text-ink-muted">
+        <h1 className="display text-4xl">Watch</h1>
+        <p className="label nums mt-2">
           {matches.length === 0
             ? "Nothing being watched."
             : `${matches.length} ${matches.length === 1 ? "piece" : "pieces"}, checked daily`}
@@ -79,21 +80,18 @@ export default async function WatchPage() {
 
       {matches.length === 0 ? (
         <div className="rounded-card border border-dashed border-line-strong bg-surface-sunk px-6 py-14 text-center">
-          <p className="mx-auto max-w-md text-sm text-ink-muted">
+          <p className="mx-auto max-w-md text-sm leading-relaxed text-ink-muted">
             Find pieces for something on your list, then tap &ldquo;watch the
             price&rdquo; on any of them. A daily job reads the listed price and
             tells you when it falls.
           </p>
-          <Link
-            href="/inbox"
-            className="mt-4 inline-block text-sm underline underline-offset-4"
-          >
+          <Link href="/inbox" className={`${btnTag} mt-4 inline-block text-sm`}>
             Go to the inbox
           </Link>
         </div>
       ) : (
         <ul className="space-y-3">
-          {matches.map((match) => {
+          {matches.map((match, index) => {
             const points = history.get(match.id) ?? [];
             const first = points[0]?.price ?? match.price_cents;
             const current = match.price_cents;
@@ -103,11 +101,15 @@ export default async function WatchPage() {
                 : null;
             const lowest =
               points.length > 0 ? Math.min(...points.map((point) => point.price)) : null;
+            const dropped = change !== null && change < 0;
 
             return (
               <li
                 key={match.id}
-                className="flex gap-4 rounded-card border border-line bg-surface p-4 shadow-card"
+                className={`animate-rise flex gap-4 rounded-card border bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-lift ${
+                  dropped ? "border-copper/50" : "border-line"
+                }`}
+                style={{ animationDelay: `${Math.min(index * 60, 360)}ms` }}
               >
                 <div className="size-20 shrink-0 overflow-hidden rounded bg-surface-sunk">
                   {match.image_url ? (
@@ -135,29 +137,29 @@ export default async function WatchPage() {
                   </p>
 
                   <div className="mt-2 flex flex-wrap items-baseline gap-x-3 gap-y-1">
-                    <span className="text-base">
-                      {formatPrice(match.price_cents, match.currency) ?? "No price"}
-                    </span>
-                    {change !== null && change < 0 ? (
-                      <span className="flex items-center gap-1 text-xs text-ink">
+                    <span className="text-base nums">{formatPrice(match.price_cents, match.currency) ?? "No price"}</span>
+                    {dropped ? (
+                      <span className="flex items-center gap-1 font-mono text-xs text-copper">
                         <TrendDownIcon className="size-3.5" />
                         {Math.abs(change)}% since first seen
                       </span>
                     ) : change !== null && change > 0 ? (
-                      <span className="text-xs text-ink-faint">
+                      <span className="font-mono text-xs text-ink-faint nums">
                         up {change}% since first seen
                       </span>
                     ) : null}
                     {lowest !== null && lowest < (match.price_cents ?? Infinity) ? (
-                      <span className="text-xs text-ink-faint">
+                      <span className="font-mono text-xs text-ink-faint nums">
                         low {formatPrice(lowest, match.currency)}
                       </span>
                     ) : null}
                   </div>
 
-                  {points.length > 1 ? <Sparkline points={points.map((p) => p.price)} /> : null}
+                  {points.length > 1 ? (
+                    <Sparkline points={points.map((p) => p.price)} falling={dropped} />
+                  ) : null}
 
-                  <p className="mt-1.5 text-xs text-ink-faint">
+                  <p className="mt-1.5 font-mono text-xs text-ink-faint nums">
                     {match.last_checked_at
                       ? `Checked ${new Date(match.last_checked_at).toLocaleDateString()}`
                       : "Not checked yet"}
@@ -170,7 +172,7 @@ export default async function WatchPage() {
         </ul>
       )}
 
-      <p className="mt-8 text-xs text-ink-faint">
+      <p className="mt-8 font-mono text-xs leading-relaxed text-ink-faint">
         Prices are read from the structured data retailers publish for search
         engines. A page that publishes none can&apos;t be watched, and is marked as
         such rather than scraped.
@@ -180,13 +182,14 @@ export default async function WatchPage() {
 }
 
 /**
- * The price history, drawn as an inline SVG.
+ * The price history, drawn as an inline SVG that records itself.
  *
- * No chart library for a 60×16 line. It's normalised to its own min and max, so
- * the shape shows the movement rather than the absolute number — the number is
- * printed right above it.
+ * No chart library for a 100×20 line. It's normalised to its own min and max,
+ * so the shape shows the movement rather than the absolute number — the number
+ * is printed right above it. The line draws in left to right once on arrival,
+ * like a needle writing the reading; reduced-motion flattens it to instant.
  */
-function Sparkline({ points }: { points: number[] }) {
+function Sparkline({ points, falling }: { points: number[]; falling: boolean }) {
   const width = 100;
   const height = 20;
   const min = Math.min(...points);
@@ -203,10 +206,13 @@ function Sparkline({ points }: { points: number[] }) {
     })
     .join(" ");
 
+  const lastX = ((points.length - 1) / (points.length - 1)) * width;
+  const lastY = height - ((points[points.length - 1] - min) / span) * height;
+
   return (
     <svg
       viewBox={`0 0 ${width} ${height}`}
-      className="mt-2 h-5 w-24 overflow-visible text-ink-muted"
+      className="mt-2 h-5 w-28 overflow-visible"
       role="img"
       aria-label={`Price history, ${points.length} readings`}
       preserveAspectRatio="none"
@@ -214,12 +220,21 @@ function Sparkline({ points }: { points: number[] }) {
       <path
         d={path}
         fill="none"
+        className={`animate-draw ${falling ? "text-copper" : "text-ink-muted"}`}
+        style={{
+          // pathLength normalises the line to length 1, so the draw animation
+          // needs no measuring.
+          strokeDasharray: 1,
+          ["--draw-length" as string]: 1,
+        }}
+        pathLength={1}
         stroke="currentColor"
         strokeWidth={1.5}
         strokeLinecap="round"
         strokeLinejoin="round"
         vectorEffect="non-scaling-stroke"
       />
+      <circle cx={lastX} cy={lastY} r={2} className={falling ? "fill-copper" : "fill-ink-muted"} />
     </svg>
   );
 }

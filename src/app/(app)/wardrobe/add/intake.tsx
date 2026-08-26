@@ -15,6 +15,7 @@ import {
 import type { ProductMetadata } from "@/lib/intake/product-page";
 import { uploadToR2 } from "@/lib/intake/upload";
 import type { ItemPatch, WardrobeItem } from "@/lib/items";
+import { btnPrimary, btnTag, pillClass } from "@/lib/ui";
 import { archiveItem, confirmItems, createItem, updateItem } from "../actions";
 import { ItemCard, PendingCard, type Ground, type PendingEntry } from "./item-card";
 
@@ -393,8 +394,8 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
     <div className="pb-24">
       <header className="mb-7 flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="display text-2xl font-medium">Add to your wardrobe</h1>
-          <p className="mt-1 text-sm text-ink-muted">
+          <h1 className="display text-4xl">Add to your wardrobe</h1>
+          <p className="mt-1.5 text-sm text-ink-muted">
             Paste what you bought online. Photograph the rest.
           </p>
         </div>
@@ -413,11 +414,7 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
                 aria-pressed={ground === option.value}
                 onClick={() => setGround(option.value)}
                 title={`Show cutouts on a ${option.label.toLowerCase()} ground`}
-                className={`rounded-full px-2.5 py-1 text-xs transition-colors ${
-                  ground === option.value
-                    ? "bg-accent text-accent-ink"
-                    : "text-ink-muted hover:text-ink"
-                }`}
+                className={pillClass}
               >
                 {option.label}
               </button>
@@ -429,10 +426,10 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
       <div className="grid gap-4 lg:grid-cols-2">
         <section className="rounded-card border border-line bg-surface p-4 shadow-card">
           <h2 className="flex items-center gap-2 text-sm font-medium">
-            <LinkIcon className="size-4 text-ink-muted" />
+            <LinkIcon className="size-4 text-copper" />
             Product links
           </h2>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 font-mono text-xs leading-relaxed text-ink-muted">
             One per line. We read the brand, material, price and photo off the page.
           </p>
           <textarea
@@ -444,15 +441,15 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
             rows={4}
             spellCheck={false}
             placeholder={"https://…\nhttps://…"}
-            className="mt-3 w-full resize-y rounded-card border border-line bg-surface-sunk px-3 py-2 font-mono text-xs leading-relaxed outline-none transition-colors placeholder:text-ink-muted focus:border-line-strong"
+            className="mt-3 w-full resize-y rounded-control border border-line bg-surface-sunk px-3 py-2 font-mono text-xs leading-relaxed outline-none transition-colors placeholder:text-ink-faint focus:border-copper"
           />
           <div className="mt-2.5 flex items-center justify-between gap-3">
-            <span className="text-xs text-ink-muted">⌘↵ to import</span>
+            <span className="label">⌘↵ to import</span>
             <button
               type="button"
               onClick={importUrls}
               disabled={cutterDown}
-              className="rounded-card bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-40"
+              className={`${btnPrimary} px-3.5 py-1.5 text-xs`}
             >
               Import
             </button>
@@ -475,21 +472,21 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
           }`}
         >
           <h2 className="flex items-center gap-2 text-sm font-medium">
-            <CameraIcon className="size-4 text-ink-muted" />
+            <CameraIcon className="size-4 text-copper" />
             Photos
           </h2>
-          <p className="mt-1 text-xs text-ink-muted">
+          <p className="mt-1 font-mono text-xs leading-relaxed text-ink-muted">
             On a hanger, blank wall, same spot each time. Backgrounds come off here, on
             this machine.
           </p>
 
           <label
-            className={`mt-3 flex h-[6.5rem] flex-col items-center justify-center gap-1.5 rounded-card border border-dashed text-center transition-colors ${
+            className={`mt-3 flex h-[6.5rem] flex-col items-center justify-center gap-1.5 rounded-control border border-dashed border-line-strong text-center transition-colors ${
               cutterDown
-                ? "cursor-not-allowed border-line text-ink-muted"
+                ? "cursor-not-allowed text-ink-muted"
                 : dragging
-                  ? "cursor-pointer border-line-strong text-ink"
-                  : "cursor-pointer border-line-strong text-ink-muted hover:text-ink"
+                  ? "cursor-pointer bg-surface-sunk text-copper"
+                  : "cursor-pointer text-ink-muted hover:text-ink"
             }`}
           >
             <input
@@ -525,7 +522,7 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
       {banner ? (
         <p
           role="alert"
-          className="mt-4 flex items-start gap-2 rounded-card border border-line bg-surface px-3.5 py-2.5 text-sm text-danger"
+          className="mt-4 flex items-start gap-2 rounded-card border border-line bg-surface px-3.5 py-2.5 font-mono text-sm text-danger shadow-card"
         >
           <AlertIcon className="mt-0.5 size-4 shrink-0" />
           {banner}
@@ -534,10 +531,10 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
 
       <section className="mt-9">
         <div className="mb-3.5 flex items-baseline justify-between">
-          <h2 className="display text-lg font-medium">
+          <h2 className="display text-2xl">
             {busy ? "Coming in" : needsReview.length > 0 ? "Worth a look" : "Just added"}
           </h2>
-          <p className="text-xs text-ink-muted">
+          <p className="label nums">
             {items.length > 0
               ? `${items.length} ${items.length === 1 ? "piece" : "pieces"} in this session`
               : null}
@@ -580,31 +577,26 @@ export function Intake({ initialItems }: { initialItems: SavedItem[] }) {
       </section>
 
       {needsReview.length > 0 ? (
-        <div className="fixed inset-x-0 bottom-0 z-20 border-t border-line bg-paper/90 backdrop-blur">
-          <div className="mx-auto flex max-w-6xl items-center justify-between gap-4 px-5 py-3">
-            <p className="text-sm">
-              <span className="font-medium">{needsReview.length}</span>
-              <span className="text-ink-muted">
-                {" "}
-                {needsReview.length === 1 ? "piece" : "pieces"} still unchecked
-              </span>
-            </p>
-            <div className="flex items-center gap-3">
-              <Link
-                href="/wardrobe"
-                className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
-              >
-                Back to wardrobe
-              </Link>
-              <button
-                type="button"
-                onClick={acceptAll}
-                className="flex items-center gap-1.5 rounded-card bg-accent px-3.5 py-1.5 text-xs font-medium text-accent-ink transition-opacity hover:opacity-90"
-              >
-                <CheckIcon className="size-3.5" />
-                Accept all tags
-              </button>
-            </div>
+        <div className="fixed inset-x-4 bottom-[4.75rem] z-20 mx-auto flex max-w-xl items-center justify-between gap-4 rounded-card border border-line bg-surface/95 px-4 py-2.5 shadow-lift backdrop-blur lg:right-10 lg:left-auto lg:max-w-md">
+          <p className="text-sm">
+            <span className="font-medium nums">{needsReview.length}</span>
+            <span className="text-ink-muted">
+              {" "}
+              {needsReview.length === 1 ? "piece" : "pieces"} still unchecked
+            </span>
+          </p>
+          <div className="flex items-center gap-3">
+            <Link href="/wardrobe" className={btnTag}>
+              Back
+            </Link>
+            <button
+              type="button"
+              onClick={acceptAll}
+              className={`${btnPrimary} px-3.5 py-1.5 text-xs`}
+            >
+              <CheckIcon className="size-3.5" />
+              Accept all tags
+            </button>
           </div>
         </div>
       ) : null}
@@ -616,14 +608,14 @@ function ModelChip({ state }: { state: ModelState }) {
   if (state.status === "ready") {
     return (
       <span
-        className="flex items-center gap-1.5 text-xs text-ink-muted"
+        className="flex items-center gap-1.5 font-mono text-xs text-ink-muted"
         title={
           state.backend === "webgpu"
             ? "Running on WebGPU"
             : "This browser has no WebGPU, so cutting runs on the CPU and takes several seconds a garment."
         }
       >
-        <span className="size-1.5 rounded-full bg-ink-muted" />
+        <span className="size-1.5 rounded-full bg-copper" />
         Cutter ready · {state.backend === "webgpu" ? "WebGPU" : "CPU"}
       </span>
     );
@@ -631,7 +623,7 @@ function ModelChip({ state }: { state: ModelState }) {
 
   if (state.status === "error") {
     return (
-      <span className="flex items-center gap-1.5 text-xs text-danger" title={state.message}>
+      <span className="flex items-center gap-1.5 font-mono text-xs text-danger" title={state.message}>
         <AlertIcon className="size-3.5" />
         Cutter unavailable
       </span>
@@ -639,7 +631,7 @@ function ModelChip({ state }: { state: ModelState }) {
   }
 
   return (
-    <span className="flex items-center gap-1.5 text-xs text-ink-muted">
+    <span className="flex items-center gap-1.5 font-mono text-xs text-ink-muted">
       <SpinnerIcon className="size-3.5" />
       {state.status === "loading" && state.percent !== undefined
         ? `Loading the cutter · ${state.percent}%`

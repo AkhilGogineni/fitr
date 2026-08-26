@@ -7,6 +7,7 @@ import { BellIcon, SearchIcon, SpinnerIcon, XIcon } from "@/components/icons";
 import type { ProductMatchRow, WishItemRow } from "@/lib/captures";
 import { CATEGORIES, CATEGORY_LABELS, formatPrice } from "@/lib/garments";
 import { PRIORITY_LABELS } from "@/lib/captures";
+import { btnPrimary, btnTag, inputClass as sharedInput } from "@/lib/ui";
 import { deleteWant, fulfilWant, updateWant } from "../../actions";
 import { dismissMatch, runDiscovery, setWatching } from "./actions";
 
@@ -19,8 +20,7 @@ import { dismissMatch, runDiscovery, setWatching } from "./actions";
  * second run inside a minute.
  */
 
-const inputClass =
-  "w-full rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none transition-colors focus:border-line-strong";
+const inputClass = sharedInput;
 
 function WantFields({ want }: { want: WishItemRow }) {
   const [pending, startTransition] = useTransition();
@@ -103,18 +103,13 @@ function WantFields({ want }: { want: WishItemRow }) {
       </div>
 
       <div className="mt-4 flex items-center gap-3">
-        <button
-          type="button"
-          disabled={pending}
-          onClick={save}
-          className="rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
-        >
+        <button type="button" disabled={pending} onClick={save} className={btnPrimary}>
           {pending ? "Saving…" : "Save"}
         </button>
-        {status ? <span className="text-xs text-ink-muted">{status}</span> : null}
+        {status ? <span className="font-mono text-xs text-ink-muted">{status}</span> : null}
       </div>
 
-      <p className="mt-3 text-xs text-ink-faint">
+      <p className="mt-3 font-mono text-xs leading-relaxed text-ink-faint">
         The category picks which of your spend ceilings applies to the search.
       </p>
     </div>
@@ -160,25 +155,20 @@ export function WantPanel({
 
       <div className="rounded-card border border-line bg-surface p-5 shadow-card">
         <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={search}
-            className="flex items-center gap-2 rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
-          >
+          <button type="button" disabled={pending} onClick={search} className={btnPrimary}>
             {pending ? <SpinnerIcon className="size-4" /> : <SearchIcon className="size-4" />}
             {pending ? "Searching the web…" : matches.length > 0 ? "Search again" : "Find pieces"}
           </button>
-          <span className="text-xs text-ink-faint">
+          <span className="font-mono text-xs leading-relaxed text-ink-faint">
             {lastRunLabel ? `Last searched ${lastRunLabel}.` : "Never searched."} Uses one
             of the month&apos;s grounded searches.
           </span>
         </div>
 
-        {message ? <p className="mt-3 text-sm text-ink-muted">{message}</p> : null}
-        {error ? <p className="mt-3 text-sm text-danger">{error}</p> : null}
+        {message ? <p className="mt-3 font-mono text-sm leading-relaxed text-ink-muted">{message}</p> : null}
+        {error ? <p className="mt-3 font-mono text-sm text-danger">{error}</p> : null}
         {pending ? (
-          <p className="mt-2 text-xs text-ink-faint">
+          <p className="mt-2 font-mono text-xs leading-relaxed text-ink-faint">
             Searching, then opening each result to check it&apos;s real and read its
             price. Takes up to a minute.
           </p>
@@ -187,8 +177,14 @@ export function WantPanel({
 
       {matches.length > 0 ? (
         <ul className="space-y-3">
-          {matches.map((match) => (
-            <MatchCard key={match.id} match={match} />
+          {matches.map((match, index) => (
+            <li
+              key={match.id}
+              className="animate-rise"
+              style={{ animationDelay: `${Math.min(index * 60, 360)}ms` }}
+            >
+              <MatchCard match={match} />
+            </li>
           ))}
         </ul>
       ) : null}
@@ -204,7 +200,7 @@ export function WantPanel({
               else setError(result.error);
             })
           }
-          className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50"
+          className={`${btnTag} text-sm`}
         >
           I bought this
         </button>
@@ -218,7 +214,7 @@ export function WantPanel({
               else setError(result.error);
             })
           }
-          className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-danger disabled:opacity-50"
+          className={`${btnTag} text-sm hover:text-danger`}
         >
           Delete this want
         </button>
@@ -236,7 +232,7 @@ function MatchCard({ match }: { match: ProductMatchRow }) {
   if (gone) return null;
 
   return (
-    <li className="flex gap-4 rounded-card border border-line bg-surface p-4 shadow-card">
+    <li className="flex gap-4 rounded-card border border-line bg-surface p-4 shadow-card transition-shadow duration-200 hover:shadow-lift">
       <div className="size-20 shrink-0 overflow-hidden rounded bg-surface-sunk">
         {match.image_url ? (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -258,7 +254,7 @@ function MatchCard({ match }: { match: ProductMatchRow }) {
         >
           {match.title ?? match.url}
         </a>
-        <p className="label mt-0.5 truncate">
+        <p className="label nums mt-0.5 truncate">
           {match.brand ?? match.retailer}
           {match.price_cents
             ? ` · ${formatPrice(match.price_cents, match.currency)}`
@@ -267,7 +263,7 @@ function MatchCard({ match }: { match: ProductMatchRow }) {
 
         <div className="mt-2.5 flex items-center gap-3">
           {match.unwatchable ? (
-            <span className="text-xs text-ink-faint">Can&apos;t be watched</span>
+            <span className="font-mono text-xs text-ink-faint">Can&apos;t be watched</span>
           ) : (
             <button
               type="button"
@@ -280,8 +276,8 @@ function MatchCard({ match }: { match: ProductMatchRow }) {
                   else setError(result.error);
                 })
               }
-              className={`flex items-center gap-1.5 text-xs underline underline-offset-4 transition-colors ${
-                watching ? "text-ink" : "text-ink-muted hover:text-ink"
+              className={`flex items-center gap-1.5 font-mono text-xs underline-offset-4 transition-colors hover:underline ${
+                watching ? "text-copper" : "text-ink-muted hover:text-ink"
               } disabled:opacity-50`}
             >
               <BellIcon className="size-3.5" />
@@ -299,14 +295,14 @@ function MatchCard({ match }: { match: ProductMatchRow }) {
                 else setError(result.error);
               })
             }
-            className="flex items-center gap-1 text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-danger disabled:opacity-50"
+            className={`${btnTag} flex items-center gap-1 hover:text-danger`}
           >
             <XIcon className="size-3.5" />
             Not this
           </button>
         </div>
 
-        {error ? <p className="mt-1.5 text-xs text-danger">{error}</p> : null}
+        {error ? <p className="mt-1.5 font-mono text-xs text-danger">{error}</p> : null}
       </div>
     </li>
   );

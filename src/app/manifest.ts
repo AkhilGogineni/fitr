@@ -22,12 +22,13 @@ export default function manifest(): MetadataRoute.Manifest {
     start_url: "/today",
     display: "standalone",
     orientation: "portrait",
-    // Matched to `--paper` and `--ink` in globals.css. The splash and the status
-    // bar are the two surfaces the CSS tokens can't reach, so they're restated
-    // here — and drift between them shows up as a flash of the wrong colour on
-    // every cold launch.
-    background_color: "#faf9f7",
-    theme_color: "#faf9f7",
+    // Matched to `--paper` in globals.css. The splash and the status bar are
+    // the two surfaces the CSS tokens can't reach, so they're restated here —
+    // and drift between them shows up as a flash of the wrong colour on every
+    // cold launch. The light value is unbleached canvas; iOS reads only one,
+    // so it gets daylight.
+    background_color: "#e9e2cf",
+    theme_color: "#25324c",
     icons: [
       { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       { src: "/icon-512.png", sizes: "512x512", type: "image/png", purpose: "any" },

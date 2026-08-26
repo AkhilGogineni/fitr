@@ -9,6 +9,7 @@ import {
   LinkIcon,
   SpinnerIcon,
   TrashIcon,
+  CameraIcon,
 } from "@/components/icons";
 import {
   CATEGORIES,
@@ -21,6 +22,7 @@ import {
   type Season,
 } from "@/lib/garments";
 import type { ItemPatch, WardrobeItem } from "@/lib/items";
+import { btnOutline, pillClass } from "@/lib/ui";
 
 /**
  * One row of the review grid.
@@ -60,11 +62,11 @@ export type PendingEntry = {
 };
 
 const inputClass =
-  "w-full rounded-sm border border-transparent bg-transparent px-1.5 py-1 text-sm " +
+  "w-full rounded-control border border-transparent bg-transparent px-1.5 py-1 text-sm " +
   // Placeholders carry the field's name here — there are no visible labels — so
   // they stay at full --ink-muted rather than being faded to decoration.
   "outline-none transition-colors placeholder:text-ink-muted hover:border-line " +
-  "focus:border-line-strong focus:bg-surface";
+  "focus:border-copper focus:bg-surface";
 
 /** A garment that hasn't finished the pipeline yet. */
 export function PendingCard({
@@ -87,7 +89,7 @@ export function PendingCard({
 
   if (entry.status === "needs-image") {
     return (
-      <li className="animate-rise rounded-card border border-line-strong bg-surface p-3 shadow-card">
+      <li className="animate-rise rounded-card border border-copper bg-surface p-3 shadow-lift">
         <label
           onDragOver={(event) => {
             event.preventDefault();
@@ -139,7 +141,7 @@ export function PendingCard({
         <button
           type="button"
           onClick={onDismiss}
-          className="mt-2 w-full rounded-card border border-line py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+          className="mt-2 w-full rounded-control border border-line py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
         >
           Skip this one
         </button>
@@ -177,7 +179,7 @@ export function PendingCard({
           <button
             type="button"
             onClick={onDismiss}
-            className="mt-2 w-full rounded-card border border-line py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+            className="mt-2 w-full rounded-control border border-line py-1 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
           >
             Dismiss
           </button>
@@ -192,12 +194,12 @@ export function PendingCard({
                 : "Saving"}
             {entry.percent !== undefined ? ` · ${entry.percent}%` : ""}
           </p>
-          <div className="mt-1.5 h-0.5 overflow-hidden rounded-full bg-surface-sunk">
+          <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-surface-sunk">
             <div
               className={
                 entry.percent !== undefined
-                  ? "h-full bg-ink-muted transition-[width] duration-300"
-                  : "h-full w-1/3 animate-slide bg-ink-muted"
+                  ? "h-full rounded-full bg-copper transition-[width] duration-300"
+                  : "h-full w-1/3 animate-slide rounded-full bg-copper"
               }
               style={entry.percent !== undefined ? { width: `${entry.percent}%` } : undefined}
             />
@@ -216,6 +218,7 @@ export function ItemCard({
   saving,
   onSave,
   onArchive,
+  onAddBackView,
 }: {
   item: WardrobeItem;
   imageUrl: string;
@@ -225,6 +228,7 @@ export function ItemCard({
   saving?: boolean;
   onSave: (patch: ItemPatch) => void;
   onArchive: () => void;
+  onAddBackView?: (file: File) => void;
 }) {
   const [draft, setDraft] = useState({
     brand: item.brand ?? "",
@@ -305,7 +309,7 @@ export function ItemCard({
         />
 
         {item.needs_review ? (
-          <span className="absolute left-2 top-2 rounded-full bg-accent px-2 py-0.5 text-[0.625rem] font-medium tracking-wide text-accent-ink">
+          <span className="absolute left-2 top-2 rounded-full bg-copper px-2 py-0.5 font-mono text-[0.625rem] uppercase tracking-wide text-[#f5efdf]">
             Needs a look
           </span>
         ) : null}
@@ -322,6 +326,24 @@ export function ItemCard({
             >
               <LinkIcon className="size-3.5" label="Product page" />
             </a>
+          ) : null}
+          {onAddBackView && !item.image_cutout_back_key ? (
+            <label
+              title="Add back view"
+              className="cursor-pointer rounded-full bg-surface/90 p-1.5 text-ink-muted transition-colors hover:text-ink"
+            >
+              <input
+                type="file"
+                accept="image/*"
+                className="sr-only"
+                onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) onAddBackView(file);
+                  event.target.value = "";
+                }}
+              />
+              <CameraIcon className="size-3.5" label="Add back view" />
+            </label>
           ) : null}
           <button
             type="button"
@@ -368,11 +390,7 @@ export function ItemCard({
               type="button"
               aria-pressed={item.category === category}
               onClick={() => onSave({ category })}
-              className={`rounded-full px-2 py-0.5 text-xs transition-colors ${
-                item.category === category
-                  ? "bg-accent text-accent-ink"
-                  : "bg-surface-sunk text-ink-muted hover:text-ink"
-              }`}
+              className={pillClass}
             >
               {CATEGORY_LABELS[category]}
             </button>
@@ -428,10 +446,8 @@ export function ItemCard({
                 aria-label={FORMALITY_LABELS[level]}
                 aria-pressed={item.formality === level}
                 onClick={() => onSave({ formality: level })}
-                className={`size-5 rounded-full text-[0.625rem] transition-colors ${
-                  item.formality === level
-                    ? "bg-accent text-accent-ink"
-                    : "bg-surface-sunk text-ink-muted hover:text-ink"
+                className={`pill size-5 rounded-full text-[0.625rem] ${
+                  item.formality === level ? "" : "bg-surface-sunk"
                 }`}
               >
                 {level}
@@ -448,11 +464,7 @@ export function ItemCard({
                 aria-label={SEASON_LABELS[season]}
                 aria-pressed={item.seasons.includes(season)}
                 onClick={() => toggleSeason(season)}
-                className={`rounded-full px-1.5 py-0.5 text-[0.625rem] uppercase tracking-wide transition-colors ${
-                  item.seasons.includes(season)
-                    ? "bg-accent text-accent-ink"
-                    : "bg-surface-sunk text-ink-muted hover:text-ink"
-                }`}
+                className={`${pillClass} px-1.5 py-0.5 font-mono text-[0.625rem] uppercase tracking-wide`}
               >
                 {SEASON_LABELS[season].slice(0, 3)}
               </button>
@@ -464,9 +476,9 @@ export function ItemCard({
           <button
             type="button"
             onClick={() => onSave({})}
-            className="flex w-full items-center justify-center gap-1.5 rounded-card border border-line py-1.5 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink"
+            className={`${btnOutline} w-full py-1.5 text-xs`}
           >
-            <CheckIcon className="size-3.5" />
+            <CheckIcon className="size-3.5 text-copper" />
             Tags are right
           </button>
         ) : null}

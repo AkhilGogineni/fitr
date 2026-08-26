@@ -1,5 +1,5 @@
 import type { Category } from "@/lib/garments";
-import type { Occasion } from "@/lib/outfits";
+import type { Occasion, Vibe } from "@/lib/outfits";
 
 /**
  * The rulebook: what this app believes about putting clothes together.
@@ -355,6 +355,74 @@ export const OCCASION_RULES: Record<Occasion, OccasionRule> = {
     note: "Four and up, and the sneaker exception does not reach here. An accessory is close to required.",
   },
 };
+
+// ---------------------------------------------------------------------------
+// Vibe
+// ---------------------------------------------------------------------------
+
+/**
+ * How a vibe bends the occasion's rules.
+ *
+ * A vibe never owns a rule; it shifts the ones the occasion already has, so
+ * Casual+Sharp cannot accidentally become Work. The bonuses are small on
+ * purpose — a vibe should break ties between defensible outfits, not
+ * manufacture a winner out of clothes the weather already ruled out.
+ */
+export type VibeRule = {
+  /** Steps added to the occasion's formality window (clamped to the 1–5 scale). */
+  formalityShift: number;
+  /** Added to the occasion's accessory weight when an accessory is worn. */
+  accessoryBonus: number;
+  /** Applied once when exactly one piece carries a pattern; negative dislikes them. */
+  patternBonus: number;
+  /** Applied once when every resolved colour is neutral; negative finds it dull. */
+  neutralBonus: number;
+  note: string;
+};
+
+export const VIBE_RULES: Record<Exclude<Vibe, "any">, VibeRule> = {
+  comfy: {
+    formalityShift: -1,
+    accessoryBonus: -0.25,
+    patternBonus: 0,
+    neutralBonus: 0.5,
+    note: "Comfort leads — soft knits and relaxed fits over structure.",
+  },
+  sharp: {
+    formalityShift: 1,
+    accessoryBonus: 0.75,
+    patternBonus: -0.5,
+    neutralBonus: 0.5,
+    note: "Clean and deliberate — pressed lines, nothing loud.",
+  },
+  bold: {
+    formalityShift: 0,
+    accessoryBonus: 0.25,
+    patternBonus: 2.5,
+    neutralBonus: -1,
+    note: "One piece should be loud — a colour or a pattern doing the talking.",
+  },
+  minimal: {
+    formalityShift: 0,
+    accessoryBonus: -0.5,
+    patternBonus: -2,
+    neutralBonus: 2,
+    note: "Quiet palette, no patterns, nothing extra.",
+  },
+};
+
+/** The occasion's formality window with the vibe applied. The one definition — scorer, shortlister and prompt all read this. */
+export function formalityWindow(
+  occasion: Occasion,
+  vibe: Vibe,
+): { min: number; max: number } {
+  const rule = OCCASION_RULES[occasion];
+  const shift = vibe === "any" ? 0 : VIBE_RULES[vibe].formalityShift;
+  return {
+    min: Math.min(5, Math.max(1, rule.formalityMin + shift)),
+    max: Math.min(5, Math.max(1, rule.formalityMax + shift)),
+  };
+}
 
 // ---------------------------------------------------------------------------
 // Weather

@@ -1,8 +1,8 @@
 import "server-only";
 
 import { CATEGORY_LABELS, type Category } from "@/lib/garments";
-import type { Occasion } from "@/lib/outfits";
-import { stylingBrief } from "@/lib/styling/rulebook";
+import { VIBE_LABELS, type Occasion, type Vibe } from "@/lib/outfits";
+import { stylingBrief, VIBE_RULES } from "@/lib/styling/rulebook";
 import type { ScoredOutfit } from "@/lib/styling/score";
 import type { Forecast } from "@/lib/weather";
 
@@ -100,7 +100,8 @@ export async function pickOutfit(
   {
     occasion,
     forecast,
-  }: { occasion: Occasion; forecast: Forecast | null },
+    vibe = "any",
+  }: { occasion: Occasion; forecast: Forecast | null; vibe?: Vibe },
 ): Promise<Pick> {
   if (candidates.length === 0) {
     throw new Error("pickOutfit needs at least one candidate.");
@@ -126,10 +127,15 @@ export async function pickOutfit(
     ? `Today: ${forecast.summary}. Feels like ${forecast.feelsLikeMin}–${forecast.feelsLikeMax}°C, ${forecast.precipChance}% chance of rain, wind to ${forecast.windMax} km/h.`
     : "No forecast available today — don't mention the weather.";
 
+  const vibeLine =
+    vibe !== "any"
+      ? `\nThe vibe they're after: ${VIBE_LABELS[vibe].toLowerCase()} — ${VIBE_RULES[vibe].note}`
+      : "";
+
   const prompt = `${stylingBrief()}
 
 ${weatherLine}
-The occasion is: ${occasion.replace("_", " ")}.
+The occasion is: ${occasion.replace("_", " ")}.${vibeLine}
 
 Here are the outfits that are actually wearable today, all built from clothes
 this person owns. A rules engine scored them; the score is a starting point and
@@ -162,10 +168,12 @@ you'd say it out loud to someone standing in front of their wardrobe.`;
           responseSchema: RESPONSE_SCHEMA,
         },
       }),
-      // Shorter than the tagger's budget. This runs while someone is standing
-      // in front of their wardrobe on a weekday morning; slow is the same as
-      // broken, and the fallback is genuinely good.
-      signal: AbortSignal.timeout(12_000),
+      // This runs while someone is standing in front of their wardrobe on a
+      // weekday morning; slow is the same as broken, and the fallback is
+      // genuinely good. Eight seconds is generous for a flash-tier model and
+      // keeps the worst-case compose from stretching past what feels like a
+      // hang.
+      signal: AbortSignal.timeout(8_000),
     });
 
     if (!response.ok) return fallback;

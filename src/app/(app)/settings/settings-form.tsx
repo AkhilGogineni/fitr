@@ -4,6 +4,7 @@ import { useState, useTransition } from "react";
 
 import { CheckIcon, ClipboardIcon, RotateIcon, SpinnerIcon } from "@/components/icons";
 import { CATEGORIES, CATEGORY_LABELS, type Category } from "@/lib/garments";
+import { btnOutline, btnPrimary, btnTag, inputClass as sharedInput } from "@/lib/ui";
 import { describePlace, type GeocodeHit } from "@/lib/weather";
 import {
   regenerateCaptureToken,
@@ -39,8 +40,7 @@ function Card({
   );
 }
 
-const inputClass =
-  "w-full rounded-card border border-line bg-paper px-3 py-2 text-sm outline-none transition-colors focus:border-line-strong";
+const inputClass = sharedInput;
 
 function LocationCard({
   initialName,
@@ -102,7 +102,7 @@ function LocationCard({
               else setError(result.error);
             })
           }
-          className="shrink-0 rounded-card border border-line px-3 py-2 text-sm transition-colors hover:border-line-strong disabled:opacity-50"
+          className={`${btnOutline} shrink-0`}
         >
           {pending ? <SpinnerIcon className="size-4" /> : "Look up"}
         </button>
@@ -113,7 +113,7 @@ function LocationCard({
           option rather than the default. */}
       <button
         type="button"
-        className="mt-2 text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
+        className={`${btnTag} mt-2`}
         onClick={() => {
           setError(null);
           navigator.geolocation?.getCurrentPosition(
@@ -218,11 +218,11 @@ function CeilingsCard({ initial }: { initial: Record<Category, number> }) {
               setStatus(result.ok ? "Saved." : result.error);
             })
           }
-          className="rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+          className={`${btnPrimary}`}
         >
           {pending ? "Saving…" : "Save ceilings"}
         </button>
-        {status ? <span className="text-xs text-ink-muted">{status}</span> : null}
+        {status ? <span className="font-mono text-xs text-ink-muted">{status}</span> : null}
       </div>
     </Card>
   );
@@ -241,7 +241,7 @@ function TokenCard({ initialToken }: { initialToken: string | null }) {
     >
       {token ? (
         <div className="flex items-center gap-2">
-          <code className="flex-1 truncate rounded-card border border-line bg-surface-sunk px-3 py-2 font-mono text-xs">
+          <code className="nums flex-1 truncate rounded-control border border-line bg-surface-sunk px-3 py-2 font-mono text-xs">
             {token}
           </code>
           <button
@@ -255,10 +255,10 @@ function TokenCard({ initialToken }: { initialToken: string | null }) {
                 () => setError("Couldn't reach the clipboard."),
               );
             }}
-            className="shrink-0 rounded-card border border-line p-2 transition-colors hover:border-line-strong"
+            className={`${btnOutline} shrink-0 p-2`}
             aria-label="Copy token"
           >
-            {copied ? <CheckIcon className="size-4" /> : <ClipboardIcon className="size-4" />}
+            {copied ? <CheckIcon className="size-4 text-copper" /> : <ClipboardIcon className="size-4" />}
           </button>
         </div>
       ) : (
@@ -276,7 +276,7 @@ function TokenCard({ initialToken }: { initialToken: string | null }) {
             else setError(result.error);
           })
         }
-        className="mt-3 flex items-center gap-1.5 text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50"
+        className={`${btnTag} mt-3 flex items-center gap-1.5`}
       >
         <RotateIcon className="size-3.5" />
         {token ? "Regenerate" : "Create a token"}

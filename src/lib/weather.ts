@@ -112,6 +112,15 @@ export async function getForecast(
   // "hour 7" below means 7am where the clothes are, not 7am UTC.
   url.searchParams.set("timezone", "auto");
   url.searchParams.set("forecast_days", "1");
+  /*
+   * Metric, explicitly. Open-Meteo's defaults already answer in Celsius, km/h
+   * and millimetres, but every unit this app prints is metric by policy — so
+   * the request pins them rather than leaning on an upstream default that
+   * could quietly put Fahrenheit on tomorrow's work ticket.
+   */
+  url.searchParams.set("temperature_unit", "celsius");
+  url.searchParams.set("wind_speed_unit", "kmh");
+  url.searchParams.set("precipitation_unit", "mm");
 
   const response = await fetch(url, {
     next: { revalidate: 1_800 },

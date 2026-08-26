@@ -5,12 +5,14 @@ import { ITEM_COLUMNS, type WardrobeItem } from "@/lib/items";
 import {
   OUTFIT_COLUMNS,
   SLOT_COLUMNS,
+  coerceVibe,
   defaultTransform,
   normaliseTransform,
   type Occasion,
   type OutfitRow,
   type SlotRow,
   type SlotView,
+  type Vibe,
 } from "@/lib/outfits";
 import { PROFILE_COLUMNS, hasLocation, type ProfileRow } from "@/lib/profile";
 import { publicUrlFor } from "@/lib/r2";
@@ -150,17 +152,29 @@ type SuggestionRow = {
   reason: string | null;
   picked_by: string | null;
   outcome: string;
+  weather: Record<string, unknown> | null;
 };
+
+/** The vibe a suggestion was composed for, read back from the weather jsonb. */
+function storedVibe(row: SuggestionRow): Vibe {
+  return coerceVibe((row.weather as { vibe?: unknown } | null)?.vibe);
+}
 
 /**
  * Builds the day's view.
  *
  * `recompose` is the "something else" path: it marks the standing suggestion as
  * overridden and produces the next one. Everything else is a read.
+ *
+ * The standing suggestion is keyed by occasion *and* vibe — switching from
+ * Casual to Casual+Sharp is a real request for a different answer, not a
+ * refresh of the old one. Vibes ride in the `weather` jsonb because they are
+ * per-composition context like the forecast is, and a column would mean a
+ * migration for a value that only ever matters on the day it was written.
  */
 export async function buildDailyView(
   occasion: Occasion,
-  { recompose = false }: { recompose?: boolean } = {},
+  { recompose = false, vibe = "any" }: { recompose?: boolean; vibe?: Vibe } = {},
 ): Promise<DailyView> {
   const supabase = await createClient();
   const today = todayIso();
@@ -174,7 +188,9 @@ export async function buildDailyView(
     supabase.from("items").select(ITEM_COLUMNS).is("archived_at", null),
     supabase
       .from("suggestions")
-      .select("id, for_date, occasion, rank, outfit_id, item_ids, reason, picked_by, outcome")
+      .select(
+        "id, for_date, occasion, rank, outfit_id, item_ids, reason, picked_by, outcome, weather",
+      )
       .eq("for_date", today)
       .eq("occasion", occasion)
       .order("rank", { ascending: false }),
@@ -185,33 +201,19 @@ export async function buildDailyView(
   const itemsById = new Map(items.map((item) => [item.id, item]));
   const existing = (suggestionRows ?? []) as SuggestionRow[];
 
-  // -- Forecast ------------------------------------------------------------
+  /*
+   * The forecast starts here but is not awaited until a view is actually being
+   * built. It used to block every render — including the common one where a
+   * stored suggestion was about to be reused after two database calls — which
+   * put Open-Meteo's latency on the critical path of the app's most-used
+   * screen. In flight, it overlaps with the slot query on cache hits and with
+   * the wear/outfit reads on compose; somebody's wait always covers it.
+   */
   const located = hasLocation(profile);
+  const weatherPromise = loadWeather(profile);
 
-  let forecast: Forecast | null = null;
-  let weatherNote: string | null = null;
-
-  if (located) {
-    try {
-      forecast = await getForecast(
-        profile!.location_lat!,
-        profile!.location_lon!,
-        profile!.location_name,
-      );
-    } catch (error) {
-      // A missing forecast weakens the suggestion; it doesn't stop it. Every
-      // weather rule in the scorer is skipped when `forecast` is null, so the
-      // result is a season-and-occasion suggestion rather than no suggestion.
-      weatherNote =
-        error instanceof WeatherUnavailable
-          ? error.message
-          : "Couldn't get the forecast.";
-    }
-  } else {
-    weatherNote = "Set where you live to factor in the weather.";
-  }
-
-  const base: DailyView = {
+  /** The view's static half, filled in once the weather lands. */
+  const baseOf = (forecast: Forecast | null, weatherNote: string | null): DailyView => ({
     occasion,
     forecast,
     weatherNote,
@@ -220,15 +222,18 @@ export async function buildDailyView(
     blocked: null,
     wardrobeSize: items.length,
     alreadyWornToday: false,
-  };
+  });
 
   // -- Reuse the standing suggestion, unless asked for another --------------
-  const standing = existing.find((row) => row.outcome !== "overridden");
+  const standing = existing.find(
+    (row) => row.outcome !== "overridden" && storedVibe(row) === vibe,
+  );
   if (standing && !recompose) {
     const suggestion = await hydrate(standing, itemsById);
     if (suggestion) {
+      const { forecast, note } = await weatherPromise;
       return {
-        ...base,
+        ...baseOf(forecast, note),
         suggestion,
         alreadyWornToday: standing.outcome === "worn",
       };
@@ -240,7 +245,8 @@ export async function buildDailyView(
 
   // -- Compose -------------------------------------------------------------
   if (items.length === 0) {
-    return { ...base, blocked: "Nothing in the wardrobe yet." };
+    const { forecast, note } = await weatherPromise;
+    return { ...baseOf(forecast, note), blocked: "Nothing in the wardrobe yet." };
   }
 
   const wearCutoff = new Date(Date.now() - WEAR_LOOKBACK_DAYS * 86_400_000)
@@ -254,6 +260,8 @@ export async function buildDailyView(
       supabase.from("outfit_slots").select(SLOT_COLUMNS),
     ]);
 
+  const { forecast, note: weatherNote } = await weatherPromise;
+
   const daysSinceWorn = new Map<string, number>();
   for (const wear of (wearRows ?? []) as { item_id: string; worn_on: string }[]) {
     const days = daysBetween(wear.worn_on, today);
@@ -263,6 +271,7 @@ export async function buildDailyView(
 
   const context: ScoreContext = {
     occasion,
+    vibe,
     forecast,
     daysSinceWorn,
     season: seasonFor(new Date(), profile?.location_lat ?? null),
@@ -300,7 +309,7 @@ export async function buildDailyView(
   ]);
 
   if (candidates.length === 0) {
-    return { ...base, blocked: explainEmpty(items, context, forecast) };
+    return { ...baseOf(forecast, weatherNote), blocked: explainEmpty(items, context, forecast) };
   }
 
   // Anything already suggested today is off the table for a reshuffle —
@@ -319,7 +328,7 @@ export async function buildDailyView(
   );
   const pool = fresh.length > 0 ? fresh : candidates;
 
-  const picked = await pickOutfit(pool, { occasion, forecast });
+  const picked = await pickOutfit(pool, { occasion, forecast, vibe });
   const rank = (existing[0]?.rank ?? 0) + 1;
 
   // Mark what's being replaced as overridden before writing the new row, so a
@@ -337,29 +346,34 @@ export async function buildDailyView(
   // trusting a value to prove itself.
   const user = await getUser();
 
-  const { data: inserted } = await supabase
-    .from("suggestions")
-    .insert({
-      user_id: user?.id,
-      for_date: today,
-      occasion,
-      rank,
-      outfit_id: picked.outfit.outfitId,
-      item_ids: picked.outfit.items.map((item) => item.id),
-      reason: picked.reason,
-      picked_by: picked.pickedBy,
-      weather: forecast ? { ...forecast } : {},
-    })
-    .select("id")
-    .single();
+  // The slot read for a saved outfit doesn't depend on the insert — they're
+  // different tables keyed by the same outfit id — so both go at once. On a
+  // ~90ms database round trip, one saved serial step per compose adds up.
+  const [{ data: inserted }, savedSlots] = await Promise.all([
+    supabase
+      .from("suggestions")
+      .insert({
+        user_id: user?.id,
+        for_date: today,
+        occasion,
+        rank,
+        outfit_id: picked.outfit.outfitId,
+        item_ids: picked.outfit.items.map((item) => item.id),
+        reason: picked.reason,
+        picked_by: picked.pickedBy,
+        weather: forecast ? { ...forecast, vibe } : { vibe },
+      })
+      .select("id")
+      .single(),
+    picked.outfit.outfitId
+      ? slotsForOutfit(picked.outfit.outfitId, itemsById)
+      : Promise.resolve(null),
+  ]);
 
-  const slots = picked.outfit.outfitId
-    ? ((await slotsForOutfit(picked.outfit.outfitId, itemsById)) ??
-      slotsForItems(picked.outfit.items))
-    : slotsForItems(picked.outfit.items);
+  const slots = savedSlots ?? slotsForItems(picked.outfit.items);
 
   return {
-    ...base,
+    ...baseOf(forecast, weatherNote),
     suggestion: {
       // A failed insert costs the acceptance metric for this suggestion, not
       // the suggestion itself — the screen still works, the buttons that need
@@ -376,6 +390,37 @@ export async function buildDailyView(
       rank,
     },
   };
+}
+
+/**
+ * The forecast, resolved into a result rather than thrown.
+ *
+ * A missing forecast weakens the suggestion; it doesn't stop it. Every weather
+ * rule in the scorer is skipped when `forecast` is null, so the result is a
+ * season-and-occasion suggestion rather than no suggestion — which is why the
+ * failure lands as a note on the ticket instead of an error.
+ */
+async function loadWeather(
+  profile: ProfileRow | null,
+): Promise<{ forecast: Forecast | null; note: string | null }> {
+  const lat = profile?.location_lat;
+  const lon = profile?.location_lon;
+  const placeName = profile?.location_name ?? null;
+  if (typeof lat !== "number" || typeof lon !== "number") {
+    return { forecast: null, note: "Set where you live to factor in the weather." };
+  }
+  try {
+    const forecast = await getForecast(lat, lon, placeName);
+    return { forecast, note: null };
+  } catch (error) {
+    return {
+      forecast: null,
+      note:
+        error instanceof WeatherUnavailable
+          ? error.message
+          : "Couldn't get the forecast.",
+    };
+  }
 }
 
 /** Rebuilds a suggestion from its stored row. Null if a garment has gone. */

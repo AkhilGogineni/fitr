@@ -6,6 +6,7 @@ import {
   OCCASION_RULES,
   RAIN_RULES,
   bandFor,
+  formalityWindow,
   inferRegister,
 } from "@/lib/styling/rulebook";
 import { disqualify, scoreOutfit, type ScoreContext, type ScoredOutfit } from "@/lib/styling/score";
@@ -51,21 +52,24 @@ const MAX_COMBINATIONS = 900;
 function itemAffinity(item: WardrobeItem, context: ScoreContext): number {
   let score = 0;
   const rule = OCCASION_RULES[context.occasion];
+  // The vibe's window, not the bare occasion's — Comfy should be able to
+  // shortlist the relaxed pieces at work rather than burying them at step one.
+  const window = formalityWindow(context.occasion, context.vibe ?? "any");
 
   if (item.seasons.length > 0) {
     score += item.seasons.includes(context.season) ? 2 : -3;
   }
 
   if (typeof item.formality === "number") {
-    if (item.formality >= rule.formalityMin && item.formality <= rule.formalityMax) {
+    if (item.formality >= window.min && item.formality <= window.max) {
       score += 2;
     } else {
       // Distance from the acceptable band, not a flat penalty — a 3 at a formal
       // occasion is a near miss and a 1 is not.
       const distance =
-        item.formality < rule.formalityMin
-          ? rule.formalityMin - item.formality
-          : item.formality - rule.formalityMax;
+        item.formality < window.min
+          ? window.min - item.formality
+          : item.formality - window.max;
       score -= distance * 1.5;
     }
   }

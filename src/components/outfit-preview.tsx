@@ -48,8 +48,8 @@ export function OutfitPreview({
                 draggable={false}
               />
             ) : (
-              <div className="flex aspect-square items-center justify-center rounded border border-dashed border-line-strong bg-surface/60 p-2 text-center">
-                <span className="text-[0.5rem] leading-tight text-ink-muted">
+              <div className="flex aspect-square items-center justify-center rounded border border-dashed border-copper/70 bg-surface/60 p-2 text-center">
+                <span className="font-mono text-[0.5rem] uppercase leading-tight tracking-wide text-ink-muted">
                   {slot.gap_spec
                     ? describeGap(slot.gap_spec, CATEGORY_LABELS[slot.layer])
                     : CATEGORY_LABELS[slot.layer]}

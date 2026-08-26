@@ -3,21 +3,26 @@ import { notFound } from "next/navigation";
 
 import { OutfitPreview } from "@/components/outfit-preview";
 import {
+  CAPTURE_COLUMNS,
   MATCH_COLUMNS,
   WISH_COLUMNS,
+  type CaptureRow,
   type ProductMatchRow,
   type WishItemRow,
+  captureImage,
 } from "@/lib/captures";
 import { assessFit, describeProspect } from "@/lib/discovery/fit";
 import { CATEGORY_LABELS, type Category } from "@/lib/garments";
 import { ITEM_COLUMNS, type WardrobeItem } from "@/lib/items";
 import { PROFILE_COLUMNS, type ProfileRow } from "@/lib/profile";
+import { publicUrlFor } from "@/lib/r2";
 import { slotsForItems } from "@/lib/styling/daily";
 import { seasonFor, type ScoreContext } from "@/lib/styling/score";
+import { btnTag } from "@/lib/ui";
 import { createClient } from "@/lib/supabase/server";
 import { WantPanel } from "./want-panel";
 
-export const metadata = { title: "Want · fitr" };
+export const metadata = { title: "Want" };
 
 /**
  * One want: what it is, what the web has, and whether it works with the closet.
@@ -56,6 +61,33 @@ export default async function WantPage({ params }: PageProps<"/inbox/want/[id]">
   const wardrobe = (itemRows ?? []) as WardrobeItem[];
   const profile = (profileRow ?? null) as ProfileRow | null;
 
+  /*
+   * The picture, resolved the same way the inbox list does: our copy first,
+   * then whatever the source capture still carries. A want with no picture at
+   * all is legal — a typed-in "grey wool overcoat" never had one — but a want
+   * that came from a link almost always can show something.
+   */
+  let sourceCapture: CaptureRow | null = null;
+  if (!want.image_key && want.from_capture_id) {
+    const { data } = await supabase
+      .from("captures")
+      .select(CAPTURE_COLUMNS)
+      .eq("id", want.from_capture_id)
+      .maybeSingle();
+    sourceCapture = (data ?? null) as CaptureRow | null;
+  }
+  const wantImage = want.image_key
+    ? publicUrlFor(want.image_key)
+    : sourceCapture
+      ? captureImage(sourceCapture, publicUrlFor)
+      : null;
+
+  // makeWant parks the source URL in `description`; reads as a fallback for
+  // wants created before the capture link was kept anywhere else.
+  const originalUrl =
+    sourceCapture?.source_url ??
+    (/^https?:\/\//i.test(want.description ?? "") ? want.description : null);
+
   const context: ScoreContext = {
     occasion: "casual",
     forecast: null,
@@ -79,25 +111,44 @@ export default async function WantPage({ params }: PageProps<"/inbox/want/[id]">
 
   const verdictTone: Record<typeof fit.verdict, string> = {
     works: "border-line bg-surface",
-    thin: "border-line-strong bg-surface-sunk",
-    no: "border-danger/40 bg-surface",
+    thin: "border-copper/60 bg-surface",
+    no: "border-danger/50 bg-surface",
   };
 
   return (
     <div className="mx-auto max-w-3xl">
-      <Link
-        href="/inbox"
-        className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
-      >
+      <Link href="/inbox" className={`${btnTag} text-sm`}>
         ← Inbox
       </Link>
 
-      <header className="mb-6 mt-3">
-        <h1 className="display text-2xl font-medium">{want.title}</h1>
-        <p className="mt-1 text-sm text-ink-muted">
-          {want.category ? CATEGORY_LABELS[want.category as Category] : "No category set"}
-          {matches.length > 0 ? ` · ${matches.length} found` : ""}
-        </p>
+      <header className="mb-6 mt-3 flex items-start gap-5">
+        {wantImage ? (
+          <div className="h-32 w-28 shrink-0 overflow-hidden rounded-card border border-line bg-surface-sunk shadow-card">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={wantImage}
+              alt={want.title}
+              className="size-full object-cover"
+            />
+          </div>
+        ) : null}
+        <div className="min-w-0">
+          <h1 className="display text-4xl">{want.title}</h1>
+          <p className="label nums mt-2">
+            {want.category ? CATEGORY_LABELS[want.category as Category] : "No category set"}
+            {matches.length > 0 ? ` · ${matches.length} found` : ""}
+          </p>
+          {originalUrl ? (
+            <a
+              href={originalUrl}
+              target="_blank"
+              rel="noreferrer noopener"
+              className={`${btnTag} mt-3 inline-block max-w-full truncate`}
+            >
+              Original link
+            </a>
+          ) : null}
+        </div>
       </header>
 
       {/* The closet check, above the shopping. Deliberately: the useful order

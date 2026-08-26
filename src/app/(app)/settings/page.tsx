@@ -2,11 +2,13 @@ import Link from "next/link";
 
 import { publicEnv } from "@/lib/env";
 import { PROFILE_COLUMNS, priceCeilings, type ProfileRow } from "@/lib/profile";
-import { createClient } from "@/lib/supabase/server";
+import { btnOutline } from "@/lib/ui";
+import { createClient, getUser } from "@/lib/supabase/server";
+import { signOut } from "@/app/login/actions";
 import { PushToggle } from "./push-toggle";
 import { SettingsForm } from "./settings-form";
 
-export const metadata = { title: "Settings · fitr" };
+export const metadata = { title: "Settings" };
 
 /**
  * The four things this app needs told rather than inferred: where you are, what
@@ -19,6 +21,7 @@ export const metadata = { title: "Settings · fitr" };
  */
 export default async function SettingsPage() {
   const supabase = await createClient();
+  const user = await getUser();
 
   const { data, error } = await supabase
     .from("profiles")
@@ -27,8 +30,8 @@ export default async function SettingsPage() {
 
   if (error || !data) {
     return (
-      <div className="mx-auto max-w-2xl rounded-card border border-line bg-surface p-6">
-        <h1 className="display text-lg font-medium">Settings</h1>
+      <div className="mx-auto max-w-2xl rounded-card border border-line bg-surface p-6 shadow-card">
+        <h1 className="display text-2xl">Settings</h1>
         <p className="mt-2 text-sm text-danger">
           {error?.message ?? "No profile row for this account."}
         </p>
@@ -47,8 +50,8 @@ export default async function SettingsPage() {
   return (
     <div className="mx-auto max-w-2xl">
       <header className="mb-8">
-        <h1 className="display text-2xl font-medium">Settings</h1>
-        <p className="mt-1 text-sm text-ink-muted">
+        <h1 className="display text-4xl">Settings</h1>
+        <p className="mt-1.5 text-sm text-ink-muted">
           Four things worth telling it once.
         </p>
       </header>
@@ -65,7 +68,21 @@ export default async function SettingsPage() {
         <PushToggle vapidPublicKey={publicEnv.NEXT_PUBLIC_VAPID_PUBLIC_KEY} />
       </div>
 
-      <p className="mt-6 text-xs text-ink-faint">
+      {/* Account. Lives here rather than only in the rail so the phone's bottom
+          bar keeps its five slots — signing out is not a daily act. */}
+      <section className="mt-4 rounded-card border border-line bg-surface p-5 shadow-card">
+        <h2 className="text-sm font-medium">Account</h2>
+        <p className="mt-1 font-mono text-xs leading-relaxed text-ink-muted">
+          Signed in as {user?.email ?? "unknown"}
+        </p>
+        <form action={signOut} className="mt-3">
+          <button type="submit" className={btnOutline}>
+            Sign out
+          </button>
+        </form>
+      </section>
+
+      <p className="mt-6 font-mono text-xs leading-relaxed text-ink-faint">
         Setting up the share sheet or the extension? See{" "}
         <code className="font-mono">docs/CAPTURE.md</code>.
       </p>

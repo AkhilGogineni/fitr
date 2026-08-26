@@ -1,0 +1,141 @@
+{
+  "title": "Choose fitr's visual world",
+  "question": "The roll assigned The Repair Bench. Keep it, take an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "The Repair Bench",
+      "kicker": "THE ROLL",
+      "lineage": "american workwear mending benches, shipping tags, selvedge repair",
+      "thesis": "The wardrobe as a workbench: garments are pieces laid on indigo canvas, wear is patina, gaps are repairs waiting.",
+      "palette": ["#20293d", "#2c3a55", "#dcc9a2", "#c96f4a", "#f0e8d6"],
+      "materials": ["indigo canvas", "kraft hang-tags", "copper rivets", "white chain-stitch rules"],
+      "viewport": "Today's suggestion hangs as one big kraft work-ticket: outfit collage stamped on top, the stylist's reason set like a chalk note beneath, two riveted buttons — Wore it / Something else — at the foot.",
+      "risk": "Deep indigo grounds must keep light garments legible — surface cards carry that job, and it is checked in both themes.",
+      "raised": [
+        {
+          "from": "acetate tab manual",
+          "raise": "Navigation becomes a real structural rail — hue-coded current section, not floating text links."
+        },
+        {
+          "from": "night-flight six-pack",
+          "raise": "All motion is damped and physical: numbers and needles ease with spring damping, nothing snaps."
+        }
+      ],
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "stitch-rule nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "date · weather ticket stub", "x": 1, "y": 2, "w": 10, "h": 1 },
+          { "label": "kraft work-ticket: outfit collage", "x": 1, "y": 3, "w": 10, "h": 5, "accent": true },
+          { "label": "chalk-note reason line", "x": 1, "y": 8, "w": 10, "h": 1 },
+          { "label": "riveted buttons", "x": 1, "y": 9, "w": 10, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "model-pick",
+      "label": "The Pattern Table",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "atelier pattern-drafting tables, oak-tag manila, red pencil",
+      "thesis": "Every garment is a drafted piece and an outfit is the assembly — a gap in an outfit is literally a missing pattern piece.",
+      "palette": ["#efe7d3", "#e6d5ac", "#c23a2b", "#33302a"],
+      "materials": ["oak-tag manila", "red pencil", "French curves", "notched seam lines"],
+      "viewport": "Today's outfit drawn as pattern pieces assembling on manila, red-pencil annotations naming each piece, grain-line arrow pointing at the weather.",
+      "risk": "Flirts with the quiet cream-paper register the app already wears — boldest execution required to leave it behind.",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "pencil nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "date stamp", "x": 1, "y": 1, "w": 5, "h": 1 },
+          { "label": "pattern-piece collage", "x": 0, "y": 2, "w": 7, "h": 7, "accent": true },
+          { "label": "red-pencil spec notes", "x": 7, "y": 2, "w": 5, "h": 7 },
+          { "label": "buttons", "x": 0, "y": 9, "w": 12, "h": 1 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-sneaker-wall",
+      "label": "Sneaker Archive Wall",
+      "verdict": "competitive",
+      "lineage": "stacked sneaker boxes, end-label colorway poetry",
+      "thesis": "The closet as an archive wall: everything shelved, labelled, and pull-able — today's fit slides half out of its box.",
+      "palette": ["#b45a2d", "#17140f", "#f7f3ea", "#3d6b6b"],
+      "materials": ["burnt-orange box board", "one-line silhouette ink", "tissue fold"],
+      "viewport": "A wall of labelled boxes; the daily pick sits half-pulled, lid hinged, tissue folded back.",
+      "case": "Fuses cleanly on identity — sneaker culture is fit culture — but the box metaphor slows the scan-and-compose jobs.",
+      "risk": "Reads sneakerhead-narrow for a whole-wardrobe app.",
+      "hero": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-sneaker-box-stacks-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/textiles-weave-drape-fashion-sneaker-box-stacks.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "shelf nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+          { "label": "box stack grid", "x": 0, "y": 1, "w": 8, "h": 9 },
+          { "label": "today's box, half-pulled", "x": 8, "y": 3, "w": 4, "h": 5, "accent": true }
+        ]
+      }
+    },
+    {
+      "id": "challenger-park-poster",
+      "label": "Park Poster",
+      "verdict": "competitive",
+      "lineage": "WPA national-park silkscreen posters",
+      "thesis": "Each day printed as one flat-ink sheet: the forecast is the landscape, the outfit is the imperative beneath it.",
+      "palette": ["#2e7f86", "#2f5d46", "#d99a3d", "#f1e6cc"],
+      "materials": ["four flat silkscreen inks", "unbroken sky swaths", "blocky caption caps"],
+      "viewport": "Layered flat planes — sky reads the forecast, midground the occasion — over a caption-bar imperative: SEE TODAY.",
+      "case": "Shares americana DNA with the bench and sings on Today, but flattens under intake and settings density.",
+      "risk": "Poster scale collapses into wallpaper when every screen must carry it.",
+      "hero": "https://impeccable.style/worlds/cards/posters-covers-sleeves-wpa-park-poster-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/posters-covers-sleeves-wpa-park-poster.webp",
+      "wireframe": {
+        "cols": 12,
+        "rows": 10,
+        "regions": [
+          { "label": "sky plane: forecast", "x": 0, "y": 0, "w": 12, "h": 4 },
+          { "label": "midground plane: outfit planes", "x": 0, "y": 4, "w": 12, "h": 4, "accent": true },
+          { "label": "caption bar imperative + buttons", "x": 0, "y": 8, "w": 12, "h": 2 }
+        ]
+      }
+    },
+    {
+      "id": "challenger-tab-manual",
+      "label": "Tabbed Field Manual",
+      "verdict": "declined",
+      "lineage": "boxed-software reference manuals, punched acetate leaves",
+      "thesis": "The app as a tabbed manual: every section a coloured divider board, content floating on acetate leaves above it.",
+      "palette": ["#e3b505", "#d96f32", "#f0e9db", "#22201b"],
+      "materials": ["milk acetate", "chrome-yellow dividers", "stepped tab rail"],
+      "case": "Fuses poorly: software-manual register fights fashion identity — but its wayfinding discipline was adopted by the bench.",
+      "kept": "The stepped tab rail: navigation you can feel the extent of.",
+      "hero": "https://impeccable.style/worlds/cards/rw-manual-acetate-tab-board-hero.webp",
+      "board": "https://impeccable.style/worlds/cards/rw-manual-acetate-tab-board.webp"
+    }
+  ],
+  "reroll": { "registers": ["safer", "bolder"] },
+  "buildPath": { "value": "code" },
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "What every wardrobe app ships — clean neutral gallery, executed impeccably.",
+    "palette": ["#ffffff", "#111827", "#2563eb"],
+    "materials": ["clean grid", "soft neutrals", "product photography"],
+    "viewport": "The arrangement a visitor expects, at full craft.",
+    "risk": "Indistinguishable from the competition by design.",
+    "wireframe": {
+      "cols": 12,
+      "rows": 10,
+      "regions": [
+        { "label": "nav", "x": 0, "y": 0, "w": 12, "h": 1 },
+        { "label": "greeting header", "x": 1, "y": 1, "w": 10, "h": 2 },
+        { "label": "outfit card", "x": 1, "y": 3, "w": 10, "h": 5, "accent": true },
+        { "label": "action buttons", "x": 1, "y": 8, "w": 10, "h": 2 }
+      ]
+    }
+  },
+  "steer": true
+}

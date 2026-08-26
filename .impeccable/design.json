@@ -1,0 +1,153 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-08-25",
+  "title": "Design System: fitr",
+  "extensions": {
+    "colorMeta": {
+      "paper": { "role": "neutral", "displayName": "Bench Canvas", "canonical": "#e9e2cf", "tonalRamp": ["oklch(20% 0.02 100)", "oklch(31% 0.025 100)", "oklch(43% 0.03 100)", "oklch(55% 0.033 100)", "oklch(67% 0.035 100)", "oklch(77% 0.035 100)", "oklch(86% 0.035 100)", "oklch(94% 0.03 100)"] },
+      "surface": { "role": "neutral", "displayName": "Kraft Tag", "canonical": "#f5efdf", "tonalRamp": ["oklch(24% 0.02 100)", "oklch(36% 0.024 100)", "oklch(48% 0.027 100)", "oklch(60% 0.028 100)", "oklch(71% 0.03 100)", "oklch(81% 0.03 100)", "oklch(90% 0.03 100)", "oklch(96% 0.026 100)"] },
+      "surface-sunk": { "role": "neutral", "displayName": "Sunk Well", "canonical": "#dcd3ba", "tonalRamp": ["oklch(19% 0.025 100)", "oklch(30% 0.03 100)", "oklch(41% 0.035 100)", "oklch(52% 0.04 100)", "oklch(63% 0.043 100)", "oklch(73% 0.046 100)", "oklch(82% 0.048 100)", "oklch(91% 0.042 100)"] },
+      "ink": { "role": "neutral", "displayName": "Ink Navy", "canonical": "#27304a", "tonalRamp": ["oklch(17% 0.04 270)", "oklch(23% 0.05 270)", "oklch(29% 0.055 270)", "oklch(37% 0.06 270)", "oklch(47% 0.06 270)", "oklch(59% 0.05 270)", "oklch(72% 0.04 270)", "oklch(86% 0.028 270)"] },
+      "ink-muted": { "role": "neutral", "displayName": "Faded Ink", "canonical": "#6d6757", "tonalRamp": ["oklch(18% 0.015 95)", "oklch(28% 0.02 95)", "oklch(38% 0.024 95)", "oklch(48% 0.027 95)", "oklch(58% 0.03 95)", "oklch(68% 0.03 95)", "oklch(79% 0.028 95)", "oklch(90% 0.022 95)"] },
+      "ink-faint": { "role": "neutral", "displayName": "Ghost Ink", "canonical": "#99927e", "tonalRamp": ["oklch(22% 0.016 95)", "oklch(33% 0.02 95)", "oklch(43% 0.024 95)", "oklch(53% 0.027 95)", "oklch(63% 0.028 95)", "oklch(72% 0.028 95)", "oklch(82% 0.026 95)", "oklch(92% 0.02 95)"] },
+      "line": { "role": "neutral", "displayName": "Hairline", "canonical": "#d0c6aa", "tonalRamp": ["oklch(21% 0.025 100)", "oklch(32% 0.03 100)", "oklch(44% 0.036 100)", "oklch(55% 0.041 100)", "oklch(66% 0.046 100)", "oklch(76% 0.05 100)", "oklch(85% 0.05 100)", "oklch(93% 0.04 100)"] },
+      "line-strong": { "role": "neutral", "displayName": "Seam Line", "canonical": "#b4a98b", "tonalRamp": ["oklch(20% 0.028 100)", "oklch(31% 0.034 100)", "oklch(42% 0.04 100)", "oklch(53% 0.046 100)", "oklch(64% 0.05 100)", "oklch(74% 0.054 100)", "oklch(83% 0.054 100)", "oklch(92% 0.042 100)"] },
+      "indigo": { "role": "primary", "displayName": "Workshirt Indigo", "canonical": "#2e3d5c", "tonalRamp": ["oklch(17% 0.04 270)", "oklch(24% 0.05 270)", "oklch(31% 0.055 270)", "oklch(39% 0.06 270)", "oklch(47% 0.06 270)", "oklch(58% 0.055 270)", "oklch(71% 0.045 270)", "oklch(85% 0.03 270)"] },
+      "indigo-deep": { "role": "primary", "displayName": "Midnight Bench", "canonical": "#25324c", "tonalRamp": ["oklch(14% 0.035 270)", "oklch(20% 0.045 270)", "oklch(27% 0.052 270)", "oklch(34% 0.058 270)", "oklch(43% 0.06 270)", "oklch(54% 0.056 270)", "oklch(68% 0.044 270)", "oklch(83% 0.03 270)"] },
+      "btn": { "role": "primary", "displayName": "Action Fill", "canonical": "#2e3d5c", "tonalRamp": ["oklch(17% 0.04 270)", "oklch(24% 0.05 270)", "oklch(31% 0.055 270)", "oklch(39% 0.06 270)", "oklch(47% 0.06 270)", "oklch(58% 0.055 270)", "oklch(71% 0.045 270)", "oklch(85% 0.03 270)"] },
+      "btn-ink": { "role": "primary", "displayName": "Action Text", "canonical": "#f2ecda", "tonalRamp": ["oklch(22% 0.018 100)", "oklch(33% 0.022 100)", "oklch(45% 0.025 100)", "oklch(56% 0.028 100)", "oklch(67% 0.03 100)", "oklch(78% 0.031 100)", "oklch(88% 0.031 100)", "oklch(95% 0.026 100)"] },
+      "btn-hover": { "role": "primary", "displayName": "Action Hover", "canonical": "#3a4b70", "tonalRamp": ["oklch(18% 0.045 270)", "oklch(26% 0.055 270)", "oklch(34% 0.062 270)", "oklch(42% 0.068 270)", "oklch(51% 0.068 270)", "oklch(61% 0.06 270)", "oklch(73% 0.05 270)", "oklch(86% 0.032 270)"] },
+      "copper": { "role": "secondary", "displayName": "Copper Thread", "canonical": "#ad5527", "tonalRamp": ["oklch(19% 0.07 45)", "oklch(28% 0.1 45)", "oklch(36% 0.12 45)", "oklch(44% 0.13 45)", "oklch(52% 0.13 45)", "oklch(63% 0.115 45)", "oklch(76% 0.09 45)", "oklch(89% 0.055 45)"] },
+      "danger": { "role": "tertiary", "displayName": "Rust Warning", "canonical": "#99351f", "tonalRamp": ["oklch(17% 0.06 32)", "oklch(25% 0.085 32)", "oklch(33% 0.105 32)", "oklch(40% 0.118 32)", "oklch(48% 0.12 32)", "oklch(59% 0.108 32)", "oklch(72% 0.085 32)", "oklch(87% 0.05 32)"] }
+    },
+    "typographyMeta": {
+      "display": { "displayName": "Display Stamp", "purpose": "Wordmark and page titles only — Big Shoulders caps, tight leading, never body copy." },
+      "body": { "displayName": "Workshirt", "purpose": "All UI prose and control text in Archivo at sm/base." },
+      "label": { "displayName": "Shipping Label", "purpose": "Courier Prime micro-caps for metadata keys, dates, counts, statuses." },
+      "data": { "displayName": "Typed Matter", "purpose": "Courier Prime sentence-case data: suggestion reasons, results, fine print." }
+    },
+    "shadows": [
+      { "name": "shadow-card", "value": "0 1px 2px rgb(39 48 74 / 0.06), 0 10px 24px -16px rgb(39 48 74 / 0.35)", "purpose": "Resting kraft cards. Dark scheme remaps the ink to black (rgb(0 0 0 / 0.45 / 0.8))." },
+      { "name": "shadow-lift", "value": "0 2px 4px rgb(39 48 74 / 0.07), 0 18px 32px -18px rgb(39 48 74 / 0.42)", "purpose": "Hero tickets and hover lift on interactive cards; black-based at night." },
+      { "name": "eyelet-inset", "value": "inset 0 1px 1px rgb(39 48 74 / 0.15)", "purpose": "The one recessive shadow — reinforcing the punched hang-tag hole." }
+    ],
+    "motion": [
+      { "name": "ease-settle", "value": "cubic-bezier(0.22, 1, 0.36, 1)", "purpose": "The house curve — rise and draw animations settle like a piece laid on the bench." },
+      { "name": "anim-rise", "value": "rise 0.5s cubic-bezier(0.22, 1, 0.36, 1) both", "purpose": "Entrance: opacity 0→1, translateY(10px)→none, blur(6px)→0. Stagger 60ms per item, capped ~300–360ms." },
+      { "name": "anim-page", "value": "page 0.28s ease-out both", "purpose": "Route change breath: opacity + 6px rise on every screen mount." },
+      { "name": "anim-draw", "value": "draw 1s cubic-bezier(0.22, 1, 0.36, 1) both", "purpose": "Sparklines draw left-to-right via stroke-dashoffset with pathLength=1." },
+      { "name": "anim-slide", "value": "slide 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite", "purpose": "Indeterminate progress bar for stages that can't report a percentage." },
+      { "name": "transition-control", "value": "150ms", "purpose": "Default duration for color/shadow/transform transitions on controls." }
+    ],
+    "breakpoints": [
+      { "name": "sm", "value": "640px" },
+      { "name": "lg", "value": "1024px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Indigo by day, chalk by night; reads pressed when active.",
+      "html": "<button class=\"ds-btn-primary\">Add gap</button>",
+      "css": ".ds-btn-primary { display:inline-flex; align-items:center; justify-content:center; gap:8px; border:none; border-radius:var(--radius-control); background:var(--btn); color:var(--btn-ink); padding:8px 16px; font-family:var(--font-archivo),sans-serif; font-size:0.875rem; font-weight:500; box-shadow:var(--shadow-card); transition:background-color .15s, box-shadow .15s, transform .15s; } .ds-btn-primary:hover { background:var(--btn-hover); box-shadow:var(--shadow-lift); } .ds-btn-primary:active { transform:translateY(1px); box-shadow:var(--shadow-card); } .ds-btn-primary:focus-visible { outline:2px solid var(--copper); outline-offset:2px; } .ds-btn-primary:disabled { pointer-events:none; opacity:.5; }"
+    },
+    {
+      "name": "Outline Button",
+      "kind": "button",
+      "refersTo": "button-outline",
+      "description": "Kraft chip with a hairline edge for secondary actions.",
+      "html": "<button class=\"ds-btn-outline\">Sign out</button>",
+      "css": ".ds-btn-outline { display:inline-flex; align-items:center; justify-content:center; gap:8px; border-radius:var(--radius-control); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:8px 16px; font-family:var(--font-archivo),sans-serif; font-size:0.875rem; transition:border-color .15s; } .ds-btn-outline:hover { border-color:var(--line-strong); } .ds-btn-outline:focus-visible { outline:2px solid var(--copper); outline-offset:2px; } .ds-btn-outline:disabled { pointer-events:none; opacity:.5; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Quiet text-only action that never competes.",
+      "html": "<button class=\"ds-btn-ghost\">Cancel</button>",
+      "css": ".ds-btn-ghost { border:none; background:none; padding:0; font-family:var(--font-archivo),sans-serif; font-size:0.875rem; color:var(--ink-muted); text-underline-offset:4px; transition:color .15s; cursor:pointer; } .ds-btn-ghost:hover { color:var(--ink); } .ds-btn-ghost:focus-visible { outline:2px solid var(--copper); outline-offset:2px; border-radius:4px; } .ds-btn-ghost:disabled { opacity:.5; }"
+    },
+    {
+      "name": "Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Surface-filled field with copper caret and copper focus border.",
+      "html": "<input class=\"ds-input\" placeholder=\"Target price\" />",
+      "css": ".ds-input { width:100%; box-sizing:border-box; border-radius:var(--radius-control); border:1px solid var(--line); background:var(--surface); color:var(--ink); padding:8px 12px; font-family:var(--font-archivo),sans-serif; font-size:0.875rem; outline:none; caret-color:var(--copper); transition:border-color .15s; } .ds-input::placeholder { color:var(--ink-faint); } .ds-input:hover { border-color:var(--line-strong); } .ds-input:focus { border-color:var(--copper); }"
+    },
+    {
+      "name": "Toggle Pill",
+      "kind": "chip",
+      "refersTo": "pill",
+      "description": "Category/season/occasion toggle; active state driven purely by aria attributes.",
+      "html": "<button class=\"ds-pill\" aria-pressed=\"true\">Tops</button> <button class=\"ds-pill\" aria-pressed=\"false\">Bottoms</button>",
+      "css": ".ds-pill { border:none; border-radius:9999px; padding:4px 10px; background:var(--surface-sunk); color:var(--ink-muted); font-family:var(--font-archivo),sans-serif; font-size:0.75rem; transition:color .15s, background-color .15s; cursor:pointer; } .ds-pill:hover { color:var(--ink); } .ds-pill[aria-pressed=\"true\"], .ds-pill[aria-current=\"page\"] { background:var(--btn); color:var(--btn-ink); } .ds-pill:focus-visible { outline:2px solid var(--copper); outline-offset:2px; }"
+    },
+    {
+      "name": "Hang-tag Ticket",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "The signature card: kraft stock, punched eyelet, strung cord, stitch rule.",
+      "html": "<div class=\"ds-ticket\"><svg class=\"ds-ticket-cord\" viewBox=\"0 0 120 64\" fill=\"none\" aria-hidden=\"true\"><path d=\"M112 0C88 30 52 50 23 61\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\"/></svg><span class=\"ds-eyelet\" aria-hidden=\"true\"></span><h3 class=\"ds-ticket-title\">fitr</h3><div class=\"ds-stitch\"></div><p class=\"ds-ticket-note\">Your wardrobe, and what belongs in it next.</p></div>",
+      "css": ".ds-ticket { position:relative; max-width:24rem; border-radius:var(--radius-card); border:1px solid var(--line); background:var(--surface); padding:28px 20px 20px; box-shadow:var(--shadow-lift); font-family:var(--font-archivo),sans-serif; } .ds-ticket-cord { position:absolute; top:-56px; left:32px; width:120px; height:56px; color:var(--line-strong); } .ds-eyelet { position:absolute; top:10px; left:44px; width:14px; height:14px; border-radius:9999px; border:3px solid var(--line-strong); background:var(--paper); box-shadow:inset 0 1px 1px rgb(39 48 74 / 0.15); } .ds-ticket-title { margin:0; font-family:var(--font-big-shoulders),sans-serif; font-weight:600; font-size:2.25rem; line-height:.96; letter-spacing:.01em; text-transform:uppercase; color:var(--ink); } .ds-stitch { margin-top:20px; height:2px; background-image:radial-gradient(circle, var(--line-strong) 1px, transparent 1.5px); background-size:8px 2px; background-repeat:repeat-x; background-position:center; } .ds-ticket-note { margin:20px 0 0; font-family:var(--font-courier),monospace; font-size:.75rem; letter-spacing:.08em; text-transform:uppercase; color:var(--ink-muted); }"
+    },
+    {
+      "name": "Rail Nav Item",
+      "kind": "nav",
+      "refersTo": "navigation",
+      "description": "Desktop rail row with copper stitch tick marking the live section.",
+      "html": "<nav class=\"ds-rail\"><a class=\"ds-nav-item ds-nav-active\" aria-current=\"page\"><span class=\"ds-tick\" aria-hidden=\"true\"></span>Today</a><a class=\"ds-nav-item\">Wardrobe</a></nav>",
+      "css": ".ds-rail { display:flex; flex-direction:column; gap:2px; width:14rem; padding:0 12px; background:#25324c; font-family:var(--font-archivo),sans-serif; } .ds-nav-item { position:relative; display:flex; align-items:center; gap:12px; padding:8px 12px; border-radius:var(--radius-control); font-size:0.875rem; color:#a9b1c4; text-decoration:none; transition:color .15s, background-color .15s; } .ds-nav-item:hover { background:rgba(255,255,255,.04); color:#e3ddca; } .ds-nav-item.ds-nav-active { background:rgba(255,255,255,.06); color:#f2ecda; } .ds-tick { position:absolute; left:0; top:50%; transform:translateY(-50%); height:16px; width:3px; border-radius:9999px; background:#dd8b57; } .ds-nav-item:not(.ds-nav-active) .ds-tick { opacity:0; } .ds-nav-item:focus-visible { outline:2px solid #dd8b57; outline-offset:2px; }"
+    },
+    {
+      "name": "Stitch Divider",
+      "kind": "custom",
+      "refersTo": null,
+      "description": "Chain-stitch rule used where a plain hr would go quiet.",
+      "html": "<div class=\"ds-stitch-rule\" role=\"separator\"></div>",
+      "css": ".ds-stitch-rule { height:2px; background-image:radial-gradient(circle, var(--line-strong) 1px, transparent 1.5px); background-size:8px 2px; background-repeat:repeat-x; background-position:center; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "The Repair Bench",
+    "overview": "fitr is a garment worker's bench, not a wardrobe app. Every piece is a cutout hung on a kraft tag; outfits are collages laid out on indigo canvas; a missing piece in an outfit is a repair waiting to happen. The category-default arrangement it refuses is the neutral white-grid wardrobe app. Light theme is the unbleached workshirt in daylight; dark theme is the same bench at night, and both schemes are first-class.\n\nDensity is calm and phone-first. The daily screen answers one question with one ticket and two riveted buttons; everything else waits quietly in panels of kraft card stock separated from the woven canvas ground by hairlines. The world speaks through materials rather than ornament: punched eyelets, strung cords, chain-stitch rules, typed shipping labels. Copper thread appears only where attention is earned — focus, selection, active state, a falling price.",
+    "keyCharacteristics": [
+      "Woven canvas ground under everything (two hairline threads at the edge of perception)",
+      "Kraft tag cards (--surface, 12px radius) that are never the same color as the ground",
+      "Copper as the single highlight voice: selection, caret, focus ring, active ticks, price drops",
+      "Shipping-tag typography: Big Shoulders caps for display, Archivo for UI, Courier Prime for typed data",
+      "Soft two-step shadow vocabulary (rest / lift); depth mostly comes from sunk wells and hairlines",
+      "Dashed hairline borders mean \"waiting\" — drop zones, outfit gaps, empty states"
+    ],
+    "rules": [
+      { "name": "The Two Cloths Rule", "body": "--surface is never the same as --paper. Cards are tags lying *on* the canvas; if they matched the ground the bench would disappear.", "section": "colors" },
+      { "name": "The Never-Bare-Ground Rule", "body": "Garment cutouts never sit on the page ground or on bare --paper; images live in sunk wells (--surface-sunk), the dark well (#14130f), or the QA checker (ground-check). White garments vanish otherwise — this is functional, not taste.", "section": "colors" },
+      { "name": "The Copper Thread Rule", "body": "Copper marks attention exactly once per moment and in small doses: a focus ring, a caret, a tick, a badge, a falling line. It is never a background field, never body text, never two competing marks in one view.", "section": "colors" },
+      { "name": "The Indigo-Day-Chalk-Night Rule", "body": "The primary button inverts across schemes: indigo fill with cream text by day, chalk fill with navy text by night. Both read as \"the pressed stamp\" on their ground.", "section": "colors" },
+      { "name": "The Shipping-Tag Rule", "body": "Anything typed — labels, prices, dates, counts, statuses, machine output — sets in Courier Prime, usually with tabular numerals. Archivo carries prose; Courier carries data. They don't swap jobs.", "section": "typography" },
+      { "name": "The Quiet-Caps Rule", "body": "Uppercase belongs to two voices only: Big Shoulders display stamps, and tracked Courier micro-labels. Body copy never shouts.", "section": "typography" },
+      { "name": "The Rest-and-Lift Rule", "body": "Surfaces rest at --shadow-card and rise to --shadow-lift only as a response — hover on a match/watch row, or genuine hero status. Nothing floats at rest; nothing uses hard offset shadows.", "section": "elevation" },
+      { "name": "The Dashed-Means-Waiting Rule", "body": "A dashed border always marks a hole to be filled: photo drop zones, outfit gap specs, empty-state panels. Solid borders mean finished things; dashed means \"not yet\".", "section": "shapes" }
+    ],
+    "dos": [
+      "Do compose controls from src/lib/ui.ts (btnPrimary, btnOutline, btnGhost, btnTag, inputClass, pillClass) — never restyle a button ad hoc.",
+      "Do put every garment cutout in a sunk well, the dark well, or ground-check — never on --paper or --page ground.",
+      "Do use .display, .label, .nums, .stitch, .eyelet before writing bespoke type or divider styles.",
+      "Do mark active states with aria-pressed / aria-current so the single global pill rule applies.",
+      "Do enter with animate-rise (stagger 60ms, cap ~360ms) and route-change with animate-page; reduced-motion is handled globally and must stay that way.",
+      "Do draw any new icon in the house construction: 24px box, 1.5 stroke, round caps and joins, no fill, currentColor, defaulting to size-4.",
+      "Do check every screen in both schemes — the button inversion and rail constancy are load-bearing."
+    ],
+    "donts": [
+      "Don't invent colors outside the token set; the rail's literal hexes are grandfathered to that one surface.",
+      "Don't let copper become a field, a heading color, or more than one competing mark in a view.",
+      "Don't use emoji or icon-font glyphs; they break the single icon construction.",
+      "Don't introduce new radii beyond 12px, 10px, 4px, and full-round.",
+      "Don't draw solid <hr> dividers where a stitch rule belongs, and never use dashed borders for finished things.",
+      "Don't add hard offset shadows, gradient text, kicker/eyebrow labels, or system display faces — none are part of this system.",
+      "Don't pull in a chart library for sparklines or a component library for controls."
+    ]
+  }
+}

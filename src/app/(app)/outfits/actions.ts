@@ -75,6 +75,31 @@ export async function createOutfit(): Promise<void> {
   if (!user) redirect("/login?next=/outfits");
 
   const supabase = await createClient();
+
+  /*
+   * An outfit row has to exist before the editor can hang slots on it, but a
+   * row with no slots is exactly what "an empty outfit" is — so before
+   * creating one, adopt any empty draft from the last ten minutes. A
+   * double-tapped button or an abandoned editor then costs nothing: the next
+   * visit reuses the same blank instead of stacking another card onto the
+   * list, and anything older than that is swept by the outfits page itself.
+   */
+  const tenMinutesAgo = new Date(Date.now() - 10 * 60_000).toISOString();
+  const [{ data: recent }, { data: slotRows }] = await Promise.all([
+    supabase
+      .from("outfits")
+      .select("id, created_at")
+      .gte("created_at", tenMinutesAgo)
+      .order("created_at", { ascending: false }),
+    supabase.from("outfit_slots").select("outfit_id"),
+  ]);
+
+  const occupied = new Set(((slotRows ?? []) as { outfit_id: string }[]).map((s) => s.outfit_id));
+  const reusable = ((recent ?? []) as { id: string; created_at: string }[]).find(
+    (outfit) => !occupied.has(outfit.id),
+  );
+  if (reusable) redirect(`/outfits/${reusable.id}`);
+
   const { data, error } = await supabase
     .from("outfits")
     .insert({ user_id: user.id })

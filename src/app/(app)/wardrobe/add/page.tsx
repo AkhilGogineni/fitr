@@ -3,7 +3,7 @@ import { publicUrlFor } from "@/lib/r2";
 import { createClient } from "@/lib/supabase/server";
 import { Intake } from "./intake";
 
-export const metadata = { title: "Add · fitr" };
+export const metadata = { title: "Add" };
 
 /**
  * Intake is a client screen — the cutter runs in the browser — so this server

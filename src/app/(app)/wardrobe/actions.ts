@@ -173,3 +173,34 @@ export async function archiveItem(id: string): Promise<ActionResult<string>> {
   refresh();
   return { ok: true, data: id };
 }
+
+/**
+ * Adds a back-view cutout to an existing item.
+ *
+ * The back view is optional — most items only have a front cutout.
+ * This action validates ownership via RLS and updates the item's
+ * back-view key.
+ */
+export async function addBackView(
+  itemId: string,
+  backCutoutKey: string,
+): Promise<ActionResult<WardrobeItem>> {
+  const user = await getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (!backCutoutKey) {
+    return { ok: false, error: "A back-view cutout key is required." };
+  }
+
+  const supabase = await createClient();
+
+  const { data, error } = await supabase
+    .from("items")
+    .update({ image_cutout_back_key: backCutoutKey })
+    .eq("id", itemId)
+    .select(ITEM_COLUMNS)
+    .single();
+
+  if (error) return { ok: false, error: error.message };
+  return { ok: true, data: data as WardrobeItem };
+}

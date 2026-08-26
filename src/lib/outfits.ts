@@ -25,6 +25,32 @@ export const OCCASION_LABELS: Record<Occasion, string> = {
 };
 
 /**
+ * The vibe: the one-word answer to "what kind of [occasion]?".
+ *
+ * The occasion says where you're going; the vibe says how you want to read
+ * when you get there. They're orthogonal on purpose — Casual+Sharp and
+ * Formal+Comfy are both real requests — and each vibe adjusts the occasion's
+ * rulebook window rather than defining its own rules, so the engine stays the
+ * single source of styling truth. `any` is the default and means no opinion.
+ */
+export const VIBES = ["any", "comfy", "sharp", "bold", "minimal"] as const;
+export type Vibe = (typeof VIBES)[number];
+
+export const VIBE_LABELS: Record<Vibe, string> = {
+  any: "Any",
+  comfy: "Comfy",
+  sharp: "Sharp",
+  bold: "Bold",
+  minimal: "Minimal",
+};
+
+export function coerceVibe(value: unknown): Vibe {
+  return (VIBES as readonly string[]).includes(value as string)
+    ? (value as Vibe)
+    : "any";
+}
+
+/**
  * Placement is stored in fractions of the canvas, never in pixels.
  *
  * `x` and `y` are the centre of the piece as a fraction of canvas width and

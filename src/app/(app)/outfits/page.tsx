@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { LayersIcon } from "@/components/icons";
 import { OutfitPreview } from "@/components/outfit-preview";
 import { CATEGORY_LABELS, type Category } from "@/lib/garments";
 import { ITEM_COLUMNS, type WardrobeItem } from "@/lib/items";
@@ -13,11 +14,12 @@ import {
   type SlotRow,
   type SlotView,
 } from "@/lib/outfits";
+import { btnPrimary } from "@/lib/ui";
 import { publicUrlFor } from "@/lib/r2";
 import { createClient } from "@/lib/supabase/server";
 import { createOutfit } from "./actions";
 
-export const metadata = { title: "Outfits · fitr" };
+export const metadata = { title: "Outfits" };
 
 /**
  * Every saved outfit, drawn with the same renderer the editor uses.
@@ -38,8 +40,8 @@ export default async function OutfitsPage() {
 
   if (error) {
     return (
-      <div className="rounded-card border border-line bg-surface p-6">
-        <h1 className="display text-lg font-medium">Outfits</h1>
+      <div className="rounded-card border border-line bg-surface p-6 shadow-card">
+        <h1 className="display text-2xl">Outfits</h1>
         <p className="mt-2 text-sm text-danger">Could not load outfits: {error.message}</p>
       </div>
     );
@@ -67,54 +69,77 @@ export default async function OutfitsPage() {
     slotsByOutfit.set(slot.outfit_id, [...(slotsByOutfit.get(slot.outfit_id) ?? []), view]);
   }
 
+  /*
+   * An outfit with no slots is a draft someone walked away from — "New outfit"
+   * has to create the row before the editor can draw on it, but an empty card
+   * in this list is noise with no meaning. Drafts younger than an hour are
+   * still being worked on and stay alive; older ones are swept here so they
+   * never surface at all. An outfit that gained even one slot is permanent.
+   */
+  const hourAgo = new Date(new Date().getTime() - 3_600_000).toISOString();
+  const abandoned = outfits.filter(
+    (outfit) =>
+      (slotsByOutfit.get(outfit.id)?.length ?? 0) === 0 &&
+      outfit.created_at < hourAgo,
+  );
+  if (abandoned.length > 0) {
+    await supabase.from("outfits").delete().in("id", abandoned.map((outfit) => outfit.id));
+  }
+  const saved = outfits.filter((outfit) => (slotsByOutfit.get(outfit.id)?.length ?? 0) > 0);
+
   return (
     <div>
       <header className="mb-8 flex flex-wrap items-baseline justify-between gap-4">
         <div>
-          <h1 className="display text-2xl font-medium">Outfits</h1>
-          <p className="mt-1 text-sm text-ink-muted">
-            {outfits.length === 0
-              ? "Nothing composed yet."
-              : `${outfits.length} saved`}
+          <h1 className="display text-4xl">Outfits</h1>
+          <p className="label nums mt-2">
+            {saved.length === 0 ? "Nothing composed yet." : `${saved.length} saved`}
           </p>
         </div>
 
         <form action={createOutfit}>
-          <button
-            type="submit"
-            className="rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90"
-          >
+          <button type="submit" className={btnPrimary}>
             New outfit
           </button>
         </form>
       </header>
 
-      {outfits.length === 0 ? (
+      {saved.length === 0 ? (
         <div className="rounded-card border border-dashed border-line-strong bg-surface-sunk px-6 py-16 text-center">
-          <p className="mx-auto max-w-md text-sm text-ink-muted">
+          <LayersIcon className="mx-auto size-8 text-ink-faint" />
+          <p className="mx-auto mt-4 max-w-md text-sm leading-relaxed text-ink-muted">
             Lay pieces out on a canvas, and leave a gap where the outfit needs
             something you don&apos;t own yet. Those gaps become the shopping list.
           </p>
         </div>
       ) : (
         <ul className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
-          {outfits.map((outfit) => {
+          {saved.map((outfit, index) => {
             const slots = slotsByOutfit.get(outfit.id) ?? [];
             const gaps = slots.filter((slot) => slot.gap_spec).length;
 
             return (
-              <li key={outfit.id}>
+              <li
+                key={outfit.id}
+                className="animate-rise"
+                style={{ animationDelay: `${Math.min(index * 40, 400)}ms` }}
+              >
                 <Link
                   href={`/outfits/${outfit.id}`}
-                  className="group block rounded-card border border-line bg-surface p-3 shadow-card transition-colors hover:border-line-strong"
+                  className="group block rounded-card border border-line bg-surface p-3 shadow-card transition-[box-shadow,border-color] duration-200 hover:-translate-y-0.5 hover:border-line-strong hover:shadow-lift"
                 >
                   <OutfitPreview slots={slots} />
                   <p className="mt-2.5 truncate text-sm">
                     {outfit.name || "Untitled outfit"}
                   </p>
-                  <p className="label mt-0.5 truncate">
+                  <p className="label nums mt-0.5 truncate">
                     {outfit.occasion ? OCCASION_LABELS[outfit.occasion] : "No occasion"}
-                    {gaps > 0 ? ` · ${gaps} gap${gaps === 1 ? "" : "s"}` : ""}
+                    {gaps > 0 ? (
+                      <span className="text-copper">
+                        {" "}
+                        · {gaps} gap{gaps === 1 ? "" : "s"}
+                      </span>
+                    ) : ""}
                   </p>
                 </Link>
               </li>

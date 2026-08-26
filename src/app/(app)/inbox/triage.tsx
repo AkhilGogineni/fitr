@@ -1,10 +1,24 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 
-import { LinkIcon, PlusIcon, SpinnerIcon, XIcon } from "@/components/icons";
-import { captureUrl, dismissCapture, makeWant, restoreCapture } from "./actions";
+import {
+  LinkIcon,
+  PaperclipIcon,
+  PlusIcon,
+  SpinnerIcon,
+  XIcon,
+} from "@/components/icons";
+import { btnPrimary } from "@/lib/ui";
+import { uploadToR2 } from "@/lib/intake/upload";
+import {
+  attachCaptureImage,
+  captureUrl,
+  dismissCapture,
+  makeWant,
+  restoreCapture,
+} from "./actions";
 
 /**
  * The triage controls: paste a link, keep it, or throw it away.
@@ -19,14 +33,22 @@ export function PasteCapture() {
   const [url, setUrl] = useState("");
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  // Not an error: "it saved, but the site refused us" is a success with a
+  // caveat, and it reads differently on purpose.
+  const [warning, setWarning] = useState<string | null>(null);
 
   const submit = () => {
     if (!url.trim()) return;
     startTransition(async () => {
       setError(null);
+      setWarning(null);
       const result = await captureUrl(url);
-      if (result.ok) setUrl("");
-      else setError(result.error);
+      if (result.ok) {
+        setUrl("");
+        setWarning(result.warning ?? null);
+      } else {
+        setError(result.error);
+      }
     });
   };
 
@@ -34,7 +56,7 @@ export function PasteCapture() {
     <div className="rounded-card border border-line bg-surface p-4 shadow-card">
       <div className="flex gap-2">
         <div className="relative flex-1">
-          <LinkIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-faint" />
+          <LinkIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-copper" />
           <input
             value={url}
             onChange={(event) => setUrl(event.target.value)}
@@ -45,23 +67,22 @@ export function PasteCapture() {
               }
             }}
             placeholder="Paste a link — TikTok, Instagram, a product page"
-            className="w-full rounded-card border border-line bg-paper py-2 pl-9 pr-3 text-sm outline-none transition-colors focus:border-line-strong"
+            className="w-full rounded-control border border-line bg-paper py-2 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-ink-faint focus:border-copper"
           />
         </div>
         <button
           type="button"
           disabled={pending || !url.trim()}
           onClick={submit}
-          className="shrink-0 rounded-card bg-accent px-3.5 py-2 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+          className={`${btnPrimary} shrink-0`}
         >
           {pending ? <SpinnerIcon className="size-4" /> : "Save"}
         </button>
       </div>
-      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
-      <p className="mt-2 text-xs text-ink-faint">
-        The share sheet and the extension do this in one tap. This is the version
-        that works anywhere.
-      </p>
+      {error ? <p className="mt-2 font-mono text-xs text-danger">{error}</p> : null}
+      {warning ? (
+        <p className="mt-2 font-mono text-xs leading-relaxed text-copper">{warning}</p>
+      ) : null}
     </div>
   );
 }
@@ -76,6 +97,7 @@ export function CaptureActions({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [error, setError] = useState<string | null>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
 
   const run = (work: () => Promise<{ ok: boolean; error?: string }>) =>
     startTransition(async () => {
@@ -84,13 +106,32 @@ export function CaptureActions({
       if (!result.ok) setError(result.error ?? "That didn't work.");
     });
 
+  /*
+   * The manual rescue for sites that block readers. The picture goes browser
+   * → R2 on the same presigned path intake uses, then a server action wires
+   * the key to the row — the bytes never route through this app's server.
+   */
+  const attach = (file: File) =>
+    run(async () => {
+      const upload = await uploadToR2(file, "capture").catch((uploadError: unknown) => ({
+        ok: false as const,
+        error:
+          uploadError instanceof Error ? uploadError.message : "Upload failed.",
+      }));
+      if (!("key" in upload)) return { ok: false, error: upload.error };
+      const result = await attachCaptureImage(captureId, upload.key);
+      // The card's image renders server-side; the refresh is the update.
+      if (result.ok) router.refresh();
+      return result;
+    });
+
   if (dismissed) {
     return (
       <button
         type="button"
         disabled={pending}
         onClick={() => run(() => restoreCapture(captureId))}
-        className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink disabled:opacity-50"
+        className="w-full rounded-control border border-line py-1.5 text-xs text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
       >
         Put it back
       </button>
@@ -111,22 +152,44 @@ export function CaptureActions({
             return result;
           })
         }
-        className="flex flex-1 items-center justify-center gap-1.5 rounded-card bg-accent px-2.5 py-1.5 text-xs font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+        className={`${btnPrimary} flex-1 px-2.5 py-1.5 text-xs`}
       >
         <PlusIcon className="size-3.5" />I want this
+      </button>
+
+      <input
+        ref={fileInput}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+          if (file) attach(file);
+        }}
+      />
+      <button
+        type="button"
+        disabled={pending}
+        onClick={() => fileInput.current?.click()}
+        aria-label="Attach a picture"
+        title="Attach a picture — for sites that block readers"
+        className="rounded-control border border-line p-1.5 text-ink-muted transition-colors hover:border-copper hover:text-copper disabled:opacity-50"
+      >
+        {pending ? <SpinnerIcon className="size-3.5" /> : <PaperclipIcon className="size-3.5" />}
       </button>
 
       <button
         type="button"
         disabled={pending}
         onClick={() => run(() => dismissCapture(captureId))}
-        className="rounded-card border border-line p-1.5 text-ink-muted transition-colors hover:border-line-strong hover:text-ink disabled:opacity-50"
+        className="rounded-control border border-line p-1.5 text-ink-muted transition-colors hover:border-danger hover:text-danger disabled:opacity-50"
         aria-label="Dismiss"
       >
         <XIcon className="size-3.5" />
       </button>
 
-      {error ? <span className="text-xs text-danger">{error}</span> : null}
+      {error ? <span className="font-mono text-xs text-danger">{error}</span> : null}
     </div>
   );
 }

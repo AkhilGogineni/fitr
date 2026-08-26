@@ -4,9 +4,11 @@ import { refresh } from "next/cache";
 
 import { WISH_COLUMNS, type WishItemRow } from "@/lib/captures";
 import { isCategory, type Category } from "@/lib/garments";
+import { fetchTikTokOEmbed } from "@/lib/intake/oembed";
 import { extractProduct } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 import type { ActionResult } from "@/lib/items";
+import { buildObjectKey, putObject } from "@/lib/r2";
 import { createClient, getUser } from "@/lib/supabase/server";
 
 /**
@@ -30,17 +32,82 @@ function trimOrNull(value: unknown, maxLength = 200): string | null {
 }
 
 /**
+ * A name from the address itself, for pages that refused to be read.
+ *
+ * Retailer slugs are written for URLs but they read fine as titles:
+ * `/p/anorak-jacket-63490735` becomes "Anorak Jacket". The interesting segment
+ * isn't always the last one — Nike parks the real name one level above its
+ * style code — so every segment gets scored and the wordiest wins. Segments
+ * that are mostly digits are style codes, video ids and locale fragments, and
+ * a code is worse than no title at all: those yield nothing.
+ */
+/** Path fragments that are navigation, never a name. */
+const SEGMENT_STOPWORDS = new Set([
+  "shop", "store", "products", "product", "item", "items", "p", "dp", "pd",
+  "t", "en", "us", "uk", "au", "ca", "de", "fr", "www", "new", "all", "goods",
+  "video", "videos", "reel", "reels", "watch", "status", "photo", "post",
+]);
+
+function titleFromUrl(url: string): string | null {
+  let segments: string[];
+  try {
+    segments = new URL(url).pathname.split("/").filter(Boolean);
+  } catch {
+    return null;
+  }
+
+  const candidates: { words: number; title: string }[] = [];
+  for (const segment of segments.slice(-4)) {
+    let text: string;
+    try {
+      text = decodeURIComponent(segment)
+        .replace(/\.(html?|php)$/i, "")
+        .replace(/[-_]\d{4,}.*$/, "") // trailing product ids
+        .replace(/[-_]+/g, " ")
+        .replace(/\s+/g, " ")
+        .trim();
+    } catch {
+      continue;
+    }
+    if (!text || /^\d+$/.test(text)) continue;
+    // Social handles (@user) and bare locale codes are not titles either.
+    if (/^@/.test(text) || /^[a-z]{2}$/i.test(text)) continue;
+    if (SEGMENT_STOPWORDS.has(text.toLowerCase())) continue;
+    const letters = text.replace(/[^a-z]/gi, "");
+    const digits = text.replace(/\D/g, "");
+    // A style code reads "P09187250"; a name never looks like that.
+    if (/^[a-z]?(\d+[ ]?)+$/i.test(text)) continue;
+    if (letters.length >= 2 && digits.length / letters.length > 1) continue;
+
+    const words = text.split(" ").filter((word) => /[a-z]{2}/i.test(word)).length;
+    candidates.push({ words, title: text });
+  }
+
+  const named = candidates.filter((entry) => entry.words >= 2);
+  const winner = named.length > 0 ? named[named.length - 1] : candidates[0];
+  if (!winner) return null;
+  return winner.title.replace(/\b\w/g, (c) => c.toUpperCase()).slice(0, 120);
+}
+
+/**
  * Saving a link from the app itself.
  *
  * The share sheet and the extension are the fast paths; this is the one that
  * works when neither is set up, on a machine that isn't yours, or when someone
  * sends you a link in a message. It reads the page the same way the capture
  * endpoint does, so a paste and a share produce the same row.
+ *
+ * Some sites refuse every automated read — the big fashion chains sit behind
+ * bot walls that 403 anything without a real browser. The row still saves:
+ * the URL is worth keeping. What changes is that the paste answers honestly
+ * ("this site blocks readers") instead of quietly filing an empty card, and
+ * the capture carries a name guessed from its own address until a picture is
+ * attached by hand.
  */
 export async function captureUrl(
   url: string,
   note?: string,
-): Promise<ActionResult<string>> {
+): Promise<ActionResult<string> & { warning?: string }> {
   const user = await getUser();
   if (!user) return { ok: false, error: "Not signed in." };
 
@@ -52,6 +119,8 @@ export async function captureUrl(
   let brand: string | null = null;
   let priceCents: number | null = null;
   let currency: string | null = null;
+  let imageKey: string | null = null;
+  let blockedBySite = false;
 
   try {
     const page = await safeFetch(trimmed, {
@@ -66,12 +135,60 @@ export async function captureUrl(
     priceCents = product.priceCents;
     currency = product.currency;
   } catch (error) {
-    // A link that can't be read is still worth keeping — most social posts
-    // carry no product markup at all, and those are the ones worth capturing.
+    // A link that can't be read is still worth keeping — but a site that
+    // answered 403 is a different situation from one that was unreachable,
+    // and the difference is worth saying out loud.
     if (error instanceof FetchRejected && error.status === 400) {
       return { ok: false, error: error.message };
     }
+    if (error instanceof FetchRejected) blockedBySite = true;
   }
+
+  /*
+   * The HTML said nothing — the usual case for TikTok, which renders in the
+   * browser. Its public oEmbed endpoint still knows the caption, the thumbnail
+   * and who posted it, which turns "Untitled" into a card you can recognise a
+   * week later. Best effort by design: a silent endpoint costs nothing here.
+   */
+  try {
+    const embed = await fetchTikTokOEmbed(trimmed);
+    if (embed) {
+      title ??= embed.title;
+      imageUrl ??= embed.imageUrl;
+      brand ??= embed.author;
+    }
+  } catch {
+    // oEmbed failing changes what lands in the row, not whether it lands.
+  }
+
+  /*
+   * Mirror the picture into R2 when we can. Remote retailer and CDN URLs die —
+   * they expire, they hotlink-block, they change shape — and a capture whose
+   * picture outlives its source is what makes triage possible on Tuesday for
+   * something shared on Friday. Failure keeps the remote URL as the fallback.
+   */
+  if (imageUrl) {
+    try {
+      const image = await safeFetch(imageUrl, {
+        accept: "image/*",
+        maxBytes: 8_000_000,
+        timeoutMs: 8_000,
+      });
+      if (image.contentType.startsWith("image/")) {
+        imageKey = await putObject(
+          buildObjectKey(user.id, "capture", image.contentType),
+          image.body,
+          image.contentType,
+        );
+      }
+    } catch {
+      // Kept the remote URL above; the inbox prefers our copy but shows theirs.
+    }
+  }
+
+  // Nothing readable anywhere? The address itself usually still names the
+  // thing — "anorak-jacket-63490735" is a better card than "Untitled".
+  title ??= titleFromUrl(trimmed);
 
   const supabase = await createClient();
   const { data, error } = await supabase
@@ -84,6 +201,7 @@ export async function captureUrl(
           ? "instagram"
           : "web",
       source_url: trimmed,
+      image_key: imageKey,
       image_url: imageUrl,
       title,
       brand,
@@ -97,7 +215,24 @@ export async function captureUrl(
   if (error) return { ok: false, error: error.message };
 
   refresh();
-  return { ok: true, data: data.id };
+
+  const host = (() => {
+    try {
+      return new URL(trimmed).hostname.replace(/^www\./, "");
+    } catch {
+      return "that site";
+    }
+  })();
+
+  return {
+    ok: true,
+    data: data.id,
+    warning: blockedBySite
+      ? `Saved — but ${host} blocks automated readers, so it couldn't get a picture. Attach one on the card.`
+      : imageUrl
+        ? undefined
+        : `Saved, with no picture — the page didn't offer one. Attach one on the card if you have it.`,
+  };
 }
 
 export async function dismissCapture(id: string): Promise<ActionResult<string>> {
@@ -126,6 +261,37 @@ export async function restoreCapture(id: string): Promise<ActionResult<string>> 
   const { error } = await supabase
     .from("captures")
     .update({ status: "new" })
+    .eq("id", id);
+
+  if (error) return { ok: false, error: error.message };
+  refresh();
+  return { ok: true, data: id };
+}
+
+/**
+ * Attaches a picture to a capture that went in bare.
+ *
+ * The bytes were uploaded straight to R2 by the browser (same presigned path
+ * as intake); this only wires the resulting key to the row. The prefix check
+ * is the whole security argument: a capture may only point at an object under
+ * the caller's own namespace, so one user can't decorate their captures with
+ * another user's objects even by guessing keys.
+ */
+export async function attachCaptureImage(
+  id: string,
+  key: string,
+): Promise<ActionResult<string>> {
+  const user = await getUser();
+  if (!user) return { ok: false, error: "Not signed in." };
+
+  if (!key.startsWith(`${user.id}/capture/`)) {
+    return { ok: false, error: "That upload doesn't belong to you." };
+  }
+
+  const supabase = await createClient();
+  const { error } = await supabase
+    .from("captures")
+    .update({ image_key: key })
     .eq("id", id);
 
   if (error) return { ok: false, error: error.message };

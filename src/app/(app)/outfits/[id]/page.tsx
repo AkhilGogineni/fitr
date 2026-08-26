@@ -13,11 +13,12 @@ import {
   type SlotView,
 } from "@/lib/outfits";
 import { publicUrlFor } from "@/lib/r2";
+import { btnTag } from "@/lib/ui";
 import { createClient } from "@/lib/supabase/server";
 import { OutfitCanvas, type WardrobePick } from "./canvas";
 import { OutfitActions } from "./outfit-actions";
 
-export const metadata = { title: "Outfit · fitr" };
+export const metadata = { title: "Outfit" };
 
 /**
  * Loads one outfit and the wardrobe it can draw from.
@@ -73,15 +74,15 @@ export default async function OutfitPage({ params }: PageProps<"/outfits/[id]">)
 
   return (
     <div>
-      <header className="mb-6 flex items-baseline justify-between gap-4">
-        <h1 className="display text-2xl font-medium">
+      <header className="mb-6 flex flex-wrap items-baseline justify-between gap-4">
+        <h1 className="display text-4xl">
           {(outfit as OutfitRow).name || "Untitled outfit"}
         </h1>
         <div className="flex items-center gap-3">
           <OutfitActions outfitId={id} />
           <Link
             href="/outfits"
-            className="text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
+            className={`${btnTag} text-sm`}
           >
             All outfits
           </Link>

@@ -1,17 +1,8 @@
-import Link from "next/link";
-import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
 
-import { signOut } from "@/app/login/actions";
 import { getUser } from "@/lib/supabase/server";
-
-const NAV = [
-  { href: "/today", label: "Today" },
-  { href: "/wardrobe", label: "Wardrobe" },
-  { href: "/outfits", label: "Outfits" },
-  { href: "/inbox", label: "Inbox" },
-  { href: "/watch", label: "Watch" },
-] as const;
+import { MobileBar, MobileTopBar, SideRail } from "./nav";
 
 /**
  * Shell for every signed-in route.
@@ -19,53 +10,28 @@ const NAV = [
  * The proxy already redirects anonymous requests, but this checks again. That
  * duplication is deliberate: the proxy is an optimistic cookie check, and a
  * layout is close enough to the data to be a real gate.
+ *
+ * The indigo rail is the bench's frame: one dark brand surface that survives
+ * both themes, with the content laid on the canvas to its right. On a phone
+ * the rail becomes a bottom bar, where a thumb already lives.
  */
 export default async function AppLayout({ children }: { children: ReactNode }) {
   const user = await getUser();
   if (!user) redirect("/login");
 
   return (
-    <div className="flex min-h-dvh flex-col">
-      <header className="sticky top-0 z-10 border-b border-line bg-paper/85 backdrop-blur">
-        <div className="mx-auto flex max-w-6xl items-center gap-6 px-5 py-3.5">
-          <Link href="/wardrobe" className="display text-base font-medium">
-            fitr
-          </Link>
+    <div className="flex min-h-dvh">
+      <SideRail />
 
-          <nav className="flex items-center gap-5 text-sm text-ink-muted">
-            {NAV.map((entry) => (
-              <Link
-                key={entry.href}
-                href={entry.href}
-                className="transition-colors hover:text-ink"
-              >
-                {entry.label}
-              </Link>
-            ))}
-          </nav>
+      <div className="flex min-w-0 flex-1 flex-col lg:pl-56">
+        <MobileTopBar />
 
-          <div className="ml-auto flex items-center gap-4">
-            <Link
-              href="/settings"
-              className="text-xs text-ink-faint transition-colors hover:text-ink"
-            >
-              Settings
-            </Link>
-            <form action={signOut}>
-              <button
-                type="submit"
-                className="text-xs text-ink-faint transition-colors hover:text-ink"
-              >
-                Sign out
-              </button>
-            </form>
-          </div>
-        </div>
-      </header>
+        <main className="mx-auto w-full max-w-6xl flex-1 px-5 pb-28 pt-7 lg:px-10 lg:pb-16 lg:pt-10">
+          {children}
+        </main>
+      </div>
 
-      <main className="mx-auto w-full max-w-6xl flex-1 px-5 py-10">
-        {children}
-      </main>
+      <MobileBar />
     </div>
   );
 }

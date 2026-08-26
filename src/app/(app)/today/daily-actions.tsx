@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState, useTransition } from "react";
 
 import { CheckIcon, RotateIcon, SpinnerIcon } from "@/components/icons";
+import { btnOutline, btnPrimary, btnTag } from "@/lib/ui";
 import { somethingElse, undoWear, wearIt } from "./actions";
 
 /**
@@ -21,11 +22,13 @@ import { somethingElse, undoWear, wearIt } from "./actions";
 export function DailyActions({
   suggestionId,
   occasion,
+  vibe,
   alreadyWorn,
   outfitId,
 }: {
   suggestionId: string;
   occasion: string;
+  vibe: string;
   alreadyWorn: boolean;
   outfitId: string | null;
 }) {
@@ -38,6 +41,12 @@ export function DailyActions({
   // a button that silently does nothing.
   const recordable = suggestionId.length > 0;
 
+  /*
+   * The flip is optimistic: the button answers at tap speed, and the database
+   * catches up behind it. Three sequential round trips of waiting made an
+   * instant-feeling action feel broken on anything above a fast link; being
+   * wrong once in a while costs one error line, not trust — the state reverts.
+   */
   const run = (work: () => Promise<{ ok: boolean; error?: string }>) =>
     startTransition(async () => {
       setError(null);
@@ -52,30 +61,32 @@ export function DailyActions({
           <button
             type="button"
             disabled={pending || !recordable}
-            onClick={() =>
+            onClick={() => {
+              setWorn(false); // optimistic undo
               run(async () => {
                 const result = await undoWear(suggestionId);
-                if (result.ok) setWorn(false);
+                if (!result.ok) setWorn(true); // put it back if the server refused
                 return result;
-              })
-            }
-            className="flex flex-1 items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 py-3 text-sm font-medium transition-colors hover:border-line-strong disabled:opacity-50"
+              });
+            }}
+            className={`${btnOutline} flex-1 px-4 py-3`}
           >
-            <CheckIcon className="size-4" />
+            <CheckIcon className="size-4 text-copper" />
             Worn today — undo?
           </button>
         ) : (
           <button
             type="button"
             disabled={pending || !recordable}
-            onClick={() =>
+            onClick={() => {
+              setWorn(true); // optimistic wear
               run(async () => {
                 const result = await wearIt(suggestionId);
-                if (result.ok) setWorn(true);
+                if (!result.ok) setWorn(false);
                 return result;
-              })
-            }
-            className="flex flex-1 items-center justify-center gap-2 rounded-card bg-accent px-4 py-3 text-sm font-medium text-accent-ink transition-opacity hover:opacity-90 disabled:opacity-50"
+              });
+            }}
+            className={`${btnPrimary} flex-1 px-4 py-3 text-base`}
           >
             {pending ? <SpinnerIcon className="size-4" /> : <CheckIcon className="size-4" />}
             Wore it
@@ -85,18 +96,18 @@ export function DailyActions({
         <button
           type="button"
           disabled={pending}
-          onClick={() => run(() => somethingElse(occasion))}
-          className="flex items-center justify-center gap-2 rounded-card border border-line bg-surface px-4 py-3 text-sm transition-colors hover:border-line-strong disabled:opacity-50"
+          onClick={() => run(() => somethingElse(occasion, vibe))}
+          className={`${btnOutline} px-4 py-3`}
         >
           <RotateIcon className="size-4" />
           Something else
         </button>
       </div>
 
-      {error ? <p className="mt-2 text-xs text-danger">{error}</p> : null}
+      {error ? <p className="mt-2 font-mono text-xs text-danger">{error}</p> : null}
 
       {!recordable ? (
-        <p className="mt-2 text-xs text-ink-faint">
+        <p className="mt-2 font-mono text-xs leading-relaxed text-ink-faint">
           This one couldn&apos;t be saved, so it can&apos;t be logged. Reload to try again.
         </p>
       ) : null}
@@ -104,7 +115,7 @@ export function DailyActions({
       {outfitId ? (
         <Link
           href={`/outfits/${outfitId}`}
-          className="mt-3 inline-block text-xs text-ink-muted underline underline-offset-4 transition-colors hover:text-ink"
+          className={`${btnTag} mt-3 inline-block`}
         >
           Open this outfit
         </Link>

@@ -14,13 +14,16 @@ import {
   OCCASION_RULES,
   RAIN_RULES,
   REQUIRED_CATEGORIES,
+  VIBE_RULES,
   bandFor,
+  formalityWindow,
   hueDistance,
   inferRegister,
   resolveColour,
   silhouetteOf,
   type ColourEntry,
 } from "@/lib/styling/rulebook";
+import type { Vibe } from "@/lib/outfits";
 
 /**
  * Scoring a candidate outfit against the rulebook.
@@ -57,6 +60,12 @@ export type ScoredOutfit = {
 
 export type ScoreContext = {
   occasion: Occasion;
+  /**
+   * How the user wants to read — shifts the formality window and tilts the
+   * accessory/pattern/palette bonuses. Absent means "no opinion", which
+   * scores exactly as it did before vibes existed.
+   */
+  vibe?: Vibe;
   forecast: Forecast | null;
   /** item id → days since it was last worn. Absent means never worn. */
   daysSinceWorn: Map<string, number>;
@@ -243,12 +252,12 @@ export function scoreOutfit(
 
   // -- Occasion and formality ---------------------------------------------
   const rule = OCCASION_RULES[context.occasion];
+  const window = formalityWindow(context.occasion, context.vibe ?? "any");
   const rated = core.filter((item) => typeof item.formality === "number");
 
   if (rated.length > 0) {
     const inRange = rated.filter(
-      (item) =>
-        item.formality! >= rule.formalityMin && item.formality! <= rule.formalityMax,
+      (item) => item.formality! >= window.min && item.formality! <= window.max,
     ).length;
     if (inRange === rated.length) {
       add(3, `Pitched right for ${context.occasion.replace("_", " ")}.`);
@@ -312,6 +321,13 @@ export function scoreOutfit(
     }
   }
 
+  // -- Vibe ---------------------------------------------------------------
+  // Silent adjustments on purpose: the sentence on the ticket comes from the
+  // pick stage, which already knows the vibe by name. Repeating it in every
+  // praise line would read like a form letter.
+  const vibeRule =
+    context.vibe && context.vibe !== "any" ? VIBE_RULES[context.vibe] : null;
+
   // -- Colour -------------------------------------------------------------
   const colours = items
     .map((item) => ({ item, colour: colourOf(item) }))
@@ -325,6 +341,7 @@ export function scoreOutfit(
 
     if (families.size === 0) {
       add(1, "All neutrals — quiet and hard to get wrong.");
+      if (vibeRule?.neutralBonus) add(vibeRule.neutralBonus, "");
     } else if (families.size === 1) {
       add(3, "One colour against neutrals.");
     } else if (families.size === 2) {
@@ -422,6 +439,7 @@ export function scoreOutfit(
   );
   if (patterned.length === 1) {
     add(1, `One pattern, everything else plain.`);
+    if (vibeRule?.patternBonus) add(vibeRule.patternBonus, "");
   } else if (patterned.length === 2) {
     const [a, b] = patterned;
     const sameType = (a.pattern ?? "").toLowerCase() === (b.pattern ?? "").toLowerCase();
@@ -441,12 +459,13 @@ export function scoreOutfit(
   }
 
   // -- Accessories --------------------------------------------------------
-  // Weighted by occasion: an accessory is close to required for going out and
-  // barely registers for a Tuesday. It never counts toward completeness.
+  // Weighted by occasion, tilted by the vibe: bold wants the finishing touch,
+  // minimal would rather go without. It never counts toward completeness.
   const accessories = byCategory(items, "accessory");
+  const accessoryWeight = rule.accessoryWeight + (vibeRule?.accessoryBonus ?? 0);
   if (accessories.length > 0) {
-    add(rule.accessoryWeight, "");
-  } else if (rule.accessoryWeight >= 1.5) {
+    add(accessoryWeight, "");
+  } else if (accessoryWeight >= 1.5) {
     add(-1, "Nothing finishing it off.");
   }
 

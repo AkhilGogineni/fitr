@@ -11,7 +11,7 @@ import type { GarmentTags } from "@/lib/garments";
  * errors far away from the cause. One literal, imported everywhere.
  */
 export const ITEM_COLUMNS =
-  "id, category, subcategory, brand, colors, pattern, material, formality, seasons, image_cutout_key, image_original_key, source_url, purchase_price_cents, needs_review, created_at";
+  "id, category, subcategory, brand, colors, pattern, material, formality, seasons, image_cutout_key, image_cutout_back_key, image_original_key, image_angles, source_url, purchase_price_cents, needs_review, created_at";
 
 export type WardrobeItem = {
   id: string;
@@ -24,7 +24,9 @@ export type WardrobeItem = {
   formality: number | null;
   seasons: string[];
   image_cutout_key: string;
+  image_cutout_back_key: string | null;
   image_original_key: string | null;
+  image_angles: Record<string, string>;
   source_url: string | null;
   purchase_price_cents: number | null;
   needs_review: boolean;
@@ -39,6 +41,7 @@ export type ItemPatch = {
 
 export type NewItemInput = {
   imageCutoutKey: string;
+  imageCutoutBackKey?: string | null;
   imageOriginalKey?: string | null;
   sourceUrl?: string | null;
   purchasePriceCents?: number | null;
