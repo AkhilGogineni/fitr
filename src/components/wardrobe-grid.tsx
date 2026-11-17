@@ -4,7 +4,7 @@ import { useState } from "react";
 import { MannequinView } from "./mannequin-view";
 import type { Category } from "@/lib/garments";
 import { CATEGORY_LABELS, formatPrice } from "@/lib/garments";
-import { publicUrlFor } from "@/lib/r2";
+import { publicUrlFor } from "@/lib/r2-client";
 
 type WardrobeItem = {
   id: string;

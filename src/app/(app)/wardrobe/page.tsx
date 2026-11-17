@@ -2,7 +2,7 @@ import Link from "next/link";
 
 import { HangerIcon } from "@/components/icons";
 import { WardrobeGrid } from "@/components/wardrobe-grid";
-import { btnPrimary } from "@/lib/ui";
+import { btnPrimary, btnTag } from "@/lib/ui";
 import { createClient } from "@/lib/supabase/server";
 
 export const metadata = { title: "Wardrobe" };

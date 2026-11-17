@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { MannequinSVG, type MannequinView } from "./mannequin-svg";
 import type { Category } from "@/lib/garments";
-import { publicUrlFor } from "@/lib/r2";
+import { publicUrlFor } from "@/lib/r2-client";
 
 type GarmentPlacement = {
   category: Category;

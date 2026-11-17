@@ -121,7 +121,9 @@ function asWardrobeItem(prospect: ProspectiveItem): WardrobeItem {
     formality: prospect.formality,
     seasons: prospect.seasons,
     image_cutout_key: "",
+    image_cutout_back_key: null,
     image_original_key: null,
+    image_angles: {},
     source_url: null,
     purchase_price_cents: null,
     // Its tags are inferred from a product title, which is exactly the state
