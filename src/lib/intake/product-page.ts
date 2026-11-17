@@ -93,10 +93,21 @@ function text(value: unknown, maxLength = 200): string | null {
  * when a price-drop alert fires at 3am. Both separators present means the last
  * one is the decimal point; a lone comma with exactly two digits after it is a
  * decimal comma; anything else is a thousands separator.
+ *
+ * **Zero is not a price.** Nothing in a wardrobe costs nothing, so a 0 is a
+ * placeholder, never a reading — and a common one. Observed 2026-11-17 on
+ * seasaltcornwall.com (Magento): a configurable product's JSON-LD carries
+ * `"offers": []`, and the page's `<meta property="product:price:amount">` says
+ * `content="0"`, because the parent of a size/colour set has no price of its
+ * own and the real one is filled in by JavaScript. Read as a number, that 0
+ * sailed under every price ceiling and would have become the price cron's
+ * baseline, after which any real price looks like a rise. So 0, negatives and
+ * anything non-finite come back as null — "this page publishes no price" —
+ * which every caller already treats as unwatchable.
  */
 export function parsePriceToCents(value: unknown): number | null {
   if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.round(value * 100) : null;
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null;
   }
   if (typeof value !== "string") return null;
 
@@ -123,7 +134,9 @@ export function parsePriceToCents(value: unknown): number | null {
   }
 
   const amount = Number.parseFloat(normalised);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  const cents = Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  // A string can still say "0.00", or round to nothing — same rule as above.
+  return cents !== null && cents > 0 ? cents : null;
 }
 
 /** Flattens the shapes JSON-LD arrives in: bare object, array, or `@graph`. */

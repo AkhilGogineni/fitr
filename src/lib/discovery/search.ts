@@ -18,10 +18,21 @@ import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
  * that powers URL import, and:
  *
  *   - a link that doesn't resolve is dropped, not shown;
+ *   - a page that says nothing product-shaped at all (`no-markup`: no Product
+ *     JSON-LD, no og:image, no price, no og:title) is dropped — there is
+ *     nothing on it to show, and nothing to confirm it is the item at all;
+ *   - a listing priced in anything but US dollars is dropped — the shopper is
+ *     in the United States, and a GBP page is a UK storefront they can't use.
+ *     A page that names no currency is kept, and flagged `currencyUnknown`;
  *   - the price comes from the page, never from the model — a model's price is
  *     a memory of a price;
  *   - a page with no structured price is kept but marked `unwatchable`, so the
  *     price cron skips it rather than starting a scraping arms race.
+ *
+ * **Every drop has a recorded reason** (`SearchOutcome.dropped`). Before that
+ * existed, a run that kept 1 of 10 looked identical whether the model invented
+ * nine URLs or nine real retailers 403'd the fetcher — two problems with
+ * opposite fixes.
  *
  * That verification pass is also what makes Phase 6 possible: by the time a
  * match is stored, it is already known to be readable.
@@ -29,11 +40,44 @@ import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 
 const DEFAULT_MODEL = "gemini-3.6-flash";
 
-/** How many links to ask for, and how many to verify. Verification is the cost. */
+/**
+ * How many links to ask for, and how many to verify.
+ *
+ * Measured 2026-11-17 with `npm run discovery:probe` (10 briefs each way,
+ * gemini-3.6-flash): asking for 6 instead of 10 did not bound the slow tail —
+ * the 6-run still had a 94s brief — and halves what survives verification. The
+ * time is in the model's searching, not in the length of the list. So 10 stays,
+ * and the timeout below is what was fixed. MAX_VERIFICATIONS sits above it only
+ * because the model occasionally returns a few extra.
+ */
 const CANDIDATES_REQUESTED = 10;
 const MAX_VERIFICATIONS = 12;
-/** Fetched a few at a time: polite to the retailers, and fast enough. */
+/**
+ * At most this many retailer fetches in flight at once: polite to the
+ * retailers, and fast enough. Run as a pool, not in fixed batches, so one slow
+ * host holds up one slot rather than the three fetches that happened to share
+ * its batch.
+ */
 const VERIFY_CONCURRENCY = 4;
+/**
+ * Per-candidate page fetch. Unchanged from before; measured verification for a
+ * whole brief (10 fetches, 4 at a time) took 0.7–5s across 20 probe runs, so
+ * this limit is not what makes discovery slow.
+ */
+const VERIFY_TIMEOUT_MS = 8_000;
+
+/**
+ * The grounded call, which is nearly all of discovery's wall time.
+ *
+ * It was 45s, and in-app about half of runs died at it. Measured 2026-11-17
+ * with `npm run discovery:probe` under a 180s ceiling, search phase only:
+ * 10 candidates — 33s to 74s, median ~47s, over 10 briefs; 6 candidates —
+ * 23s to 94s, median ~40s, over the same briefs. 150s is the 94s worst case plus ~60%
+ * headroom. It runs behind an explicit button in a server action, and the
+ * page that hosts that action raises `maxDuration` to cover this plus
+ * verification (see inbox/want/[id]/page.tsx).
+ */
+const GROUNDED_TIMEOUT_MS = 150_000;
 
 export type Candidate = {
   url: string;
@@ -42,12 +86,47 @@ export type Candidate = {
   retailer: string;
   priceCents: number | null;
   currency: string | null;
+  /**
+   * True when the page names no currency. It is kept — most such pages on a
+   * US-only search are US stores — but whatever reads `priceCents` should know
+   * the "USD" it may assume was not read off the page.
+   */
+  currencyUnknown: boolean;
   imageUrl: string | null;
   /** True when the page published no machine-readable price. */
   unwatchable: boolean;
   /** The model's one line on why this answers the brief. */
   rationale: string | null;
 };
+
+/**
+ * Why a proposed link didn't make the list. Kept as values, not sentences, so
+ * a run can be totted up: `http_403` across five retailers is a bot wall,
+ * `http_404` across five is the model inventing URLs.
+ */
+export type DropReason =
+  /** The model's "URL" didn't parse, or wasn't http(s). */
+  | "bad_url"
+  /** Proposed beyond `MAX_VERIFICATIONS`, so never fetched. */
+  | "not_verified"
+  /** The retailer answered with this (non-2xx) status. */
+  | `http_${number}`
+  | "timeout"
+  | "dns"
+  | "unreachable"
+  | "private_address"
+  | "too_large"
+  | "redirect"
+  /** Any other refusal from `safeFetch`. */
+  | "fetch_rejected"
+  /** Reachable, but nothing product-shaped in the HTML (a JS shell or soft 404). */
+  | "no_product_markup"
+  /** The page states a currency, and it isn't USD. */
+  | "non_usd"
+  /** Something threw that isn't a fetch refusal — a bug, logged as such. */
+  | "error";
+
+export type DroppedCandidate = { url: string; reason: DropReason };
 
 export class DiscoveryError extends Error {
   readonly status: number;
@@ -62,7 +141,7 @@ export type SearchBrief = {
   title: string;
   description?: string | null;
   category?: string | null;
-  /** In cents. The model is told, and the ranker enforces. */
+  /** In cents (USD). The model is told, and the ranker enforces. */
   ceilingCents?: number | null;
   /** Brands already in the wardrobe — the ones to steer away from. */
   familiarBrands: string[];
@@ -70,7 +149,7 @@ export type SearchBrief = {
 
 function buildPrompt(brief: SearchBrief): string {
   const ceiling = brief.ceilingCents
-    ? `Stay at or under ${(brief.ceilingCents / 100).toFixed(0)} in the listing's own currency.`
+    ? `Stay at or under $${(brief.ceilingCents / 100).toFixed(0)} USD.`
     : "There is no strict budget, but prefer sensibly-priced options over designer ones.";
 
   const familiar =
@@ -86,6 +165,11 @@ BRIEF
   ${brief.category ? `Category: ${brief.category}` : ""}
 
 CONSTRAINTS
+  The shopper is in the United States and pays in US dollars. Only return
+  retailers that sell and ship to the United States with prices in USD. When a
+  brand runs several country storefronts, give the US one — never a UK, EU,
+  Canadian or Australian storefront, and never a page priced in GBP, EUR, CAD
+  or AUD.
   ${ceiling}
   ${familiar}
   Only direct product pages — a page for one specific buyable item. Never a
@@ -103,8 +187,10 @@ array is a correct answer. Inventing a plausible-looking URL is not — every on
 of these is going to be fetched, and a made-up link is worse than no link.`;
 }
 
+type Proposal = { url: string; title?: string; brand?: string; why?: string };
+
 /** Pulls a JSON array out of a response that may or may not be fenced. */
-function parseCandidates(raw: string): { url: string; title?: string; brand?: string; why?: string }[] {
+function parseCandidates(raw: string): Proposal[] {
   const cleaned = raw
     .replace(/^\s*```(?:json)?/i, "")
     .replace(/```\s*$/, "")
@@ -129,9 +215,7 @@ function parseCandidates(raw: string): { url: string; title?: string; brand?: st
  * format is asked for in the prompt and parsed leniently. That's the trade for
  * results that come from the live web rather than from training data.
  */
-async function askForCandidates(brief: SearchBrief): Promise<
-  { url: string; title?: string; brand?: string; why?: string }[]
-> {
+async function askForCandidates(brief: SearchBrief): Promise<Proposal[]> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new DiscoveryError(
@@ -157,7 +241,7 @@ async function askForCandidates(brief: SearchBrief): Promise<
     }),
     // Grounded generation is slow — it's several searches plus a synthesis.
     // This runs behind an explicit button, not a page load, so it can afford it.
-    signal: AbortSignal.timeout(45_000),
+    signal: AbortSignal.timeout(GROUNDED_TIMEOUT_MS),
   }).catch((error: unknown) => {
     if (error instanceof Error && error.name === "TimeoutError") {
       throw new DiscoveryError("The search took too long.", 504);
@@ -182,7 +266,13 @@ async function askForCandidates(brief: SearchBrief): Promise<
     throw new DiscoveryError(`Search returned ${response.status}: ${detail.slice(0, 200)}`);
   }
 
-  const payload = (await response.json()) as {
+  // The body arrives after the headers, and the timeout signal still covers it.
+  const payload = (await response.json().catch((error: unknown) => {
+    if (error instanceof Error && error.name === "TimeoutError") {
+      throw new DiscoveryError("The search took too long.", 504);
+    }
+    throw new DiscoveryError("The search sent back something unreadable.", 502);
+  })) as {
     candidates?: { content?: { parts?: { text?: string }[] } }[];
   };
 
@@ -194,80 +284,148 @@ async function askForCandidates(brief: SearchBrief): Promise<
   return raw ? parseCandidates(raw) : [];
 }
 
+type Verified = { ok: true; candidate: Candidate } | { ok: false; dropped: DroppedCandidate };
+
+function dropReasonFor(error: unknown): DropReason {
+  if (error instanceof FetchRejected) {
+    switch (error.code) {
+      case "http":
+        return error.upstreamStatus ? `http_${error.upstreamStatus}` : "fetch_rejected";
+      case "timeout":
+      case "dns":
+      case "unreachable":
+      case "private_address":
+      case "too_large":
+      case "redirect":
+        return error.code;
+      case "bad_url":
+      case "protocol":
+        return "bad_url";
+      default:
+        return "fetch_rejected";
+    }
+  }
+  // `safeFetch` maps an abort during the request to FetchRejected, but an
+  // abort while the body is still streaming surfaces as the raw AbortError.
+  if (error instanceof Error && error.name === "AbortError") return "timeout";
+  return "error";
+}
+
 /**
  * Fetches a candidate and reads what the page actually says.
  *
- * Returns null when the link is dead, private, unreachable, or not a page we
- * can read — all of which mean the same thing to the user, which is that it
- * shouldn't be on the list.
+ * Every outcome is either a candidate or a drop with its reason — never a bare
+ * null — so a run that keeps one of ten can say what happened to the other nine.
  */
-async function verify(
-  candidate: { url: string; title?: string; brand?: string; why?: string },
-): Promise<Candidate | null> {
+async function verify(proposal: Proposal): Promise<Verified> {
+  const proposedUrl = typeof proposal.url === "string" ? proposal.url : String(proposal.url);
+  const drop = (reason: DropReason): Verified => ({
+    ok: false,
+    dropped: { url: proposedUrl, reason },
+  });
+
   let url: URL;
   try {
-    url = new URL(candidate.url);
+    url = new URL(proposedUrl);
   } catch {
-    return null;
+    return drop("bad_url");
   }
-  if (url.protocol !== "https:" && url.protocol !== "http:") return null;
+  if (url.protocol !== "https:" && url.protocol !== "http:") return drop("bad_url");
 
   try {
     const page = await safeFetch(url.href, {
       accept: "text/html,application/xhtml+xml",
       maxBytes: 3_000_000,
-      timeoutMs: 8_000,
+      timeoutMs: VERIFY_TIMEOUT_MS,
     });
     const product = extractProduct(new TextDecoder().decode(page.body), page.finalUrl);
 
-    // No markup at all usually means a JavaScript shell — the same wall URL
-    // import hits on the large chains. The link is real, so it's kept; it just
-    // can't be priced or watched.
+    // No Product data, no image, no price, no og:title: a JavaScript shell or
+    // a soft 404. There is nothing to show and nothing to confirm the link is
+    // the item the model said it was.
+    if (product.reason === "no-markup") return drop("no_product_markup");
+
+    const currency = product.currency?.trim().toUpperCase() || null;
+    if (currency !== null && currency !== "USD") return drop("non_usd");
+
+    // `parsePriceToCents` already turns a 0 into null; this is the line that
+    // makes such a page unwatchable rather than "free".
     const unwatchable = product.priceCents === null;
 
     return {
-      // The URL *after* redirects: the one that was really fetched, and the one
-      // the price cron will fetch again.
-      url: page.finalUrl,
-      title: product.title ?? candidate.title ?? null,
-      brand: product.brand ?? candidate.brand ?? null,
-      retailer: new URL(page.finalUrl).hostname.replace(/^www\./, ""),
-      priceCents: product.priceCents,
-      currency: product.currency,
-      imageUrl: product.imageUrl,
-      unwatchable,
-      rationale: typeof candidate.why === "string" ? candidate.why.slice(0, 200) : null,
+      ok: true,
+      candidate: {
+        // The URL *after* redirects: the one that was really fetched, and the
+        // one the price cron will fetch again.
+        url: page.finalUrl,
+        title: product.title ?? proposal.title ?? null,
+        brand: product.brand ?? proposal.brand ?? null,
+        retailer: new URL(page.finalUrl).hostname.replace(/^www\./, ""),
+        priceCents: product.priceCents,
+        currency,
+        currencyUnknown: currency === null,
+        imageUrl: product.imageUrl,
+        unwatchable,
+        rationale: typeof proposal.why === "string" ? proposal.why.slice(0, 200) : null,
+      },
     };
   } catch (error) {
-    if (error instanceof FetchRejected) return null;
-    return null;
+    const reason = dropReasonFor(error);
+    if (reason === "error") console.error("Discovery verify failed", proposedUrl, error);
+    return drop(reason);
   }
 }
 
-/** Runs `verify` a few at a time rather than all at once. */
+/** Runs `verify` over a small pool of workers rather than all at once. */
 async function verifyAll(
-  candidates: { url: string; title?: string; brand?: string; why?: string }[],
-): Promise<Candidate[]> {
-  const queue = candidates.slice(0, MAX_VERIFICATIONS);
-  const verified: Candidate[] = [];
+  proposals: Proposal[],
+): Promise<{ candidates: Candidate[]; dropped: DroppedCandidate[] }> {
+  const queue = proposals.slice(0, MAX_VERIFICATIONS);
+  const results: Verified[] = new Array(queue.length);
+  let next = 0;
 
-  for (let start = 0; start < queue.length; start += VERIFY_CONCURRENCY) {
-    const batch = queue.slice(start, start + VERIFY_CONCURRENCY);
-    const results = await Promise.all(batch.map(verify));
-    for (const result of results) if (result) verified.push(result);
+  async function worker() {
+    while (next < queue.length) {
+      const index = next++;
+      results[index] = await verify(queue[index]);
+    }
+  }
+  await Promise.all(
+    Array.from({ length: Math.min(VERIFY_CONCURRENCY, queue.length) }, worker),
+  );
+
+  const candidates: Candidate[] = [];
+  const dropped: DroppedCandidate[] = [];
+  for (const result of results) {
+    if (result.ok) candidates.push(result.candidate);
+    else dropped.push(result.dropped);
+  }
+  for (const proposal of proposals.slice(MAX_VERIFICATIONS)) {
+    dropped.push({ url: String(proposal.url), reason: "not_verified" });
   }
 
-  return verified;
+  return { candidates, dropped };
 }
 
 export type SearchOutcome = {
   candidates: Candidate[];
   /** How many the model proposed, before verification. */
   proposed: number;
+  /** Every proposal that didn't survive verification, and why. */
+  dropped: DroppedCandidate[];
+  /** Wall time of the two halves, for tuning the timeouts above. */
+  timings: { searchMs: number; verifyMs: number };
 };
 
 export async function findProducts(brief: SearchBrief): Promise<SearchOutcome> {
+  const searchStart = Date.now();
   const proposed = await askForCandidates(brief);
-  const candidates = await verifyAll(proposed);
-  return { candidates, proposed: proposed.length };
+  const verifyStart = Date.now();
+  const { candidates, dropped } = await verifyAll(proposed);
+  return {
+    candidates,
+    proposed: proposed.length,
+    dropped,
+    timings: { searchMs: verifyStart - searchStart, verifyMs: Date.now() - verifyStart },
+  };
 }

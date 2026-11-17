@@ -36,12 +36,41 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 const USER_AGENT =
   "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
 
+/**
+ * What kind of refusal it was, as a value rather than a sentence. The message
+ * is for people; this is for code that has to count failures — discovery
+ * reports why each candidate it dropped was dropped, and "the message said
+ * 'took too long'" is not something to branch on.
+ */
+export type FetchRejectedCode =
+  | "bad_url"
+  | "protocol"
+  | "dns"
+  | "private_address"
+  | "timeout"
+  | "unreachable"
+  | "redirect"
+  | "http"
+  | "too_large"
+  | "empty"
+  | "rejected";
+
 export class FetchRejected extends Error {
   readonly status: number;
-  constructor(message: string, status = 422) {
+  readonly code: FetchRejectedCode;
+  /** The status the remote server actually answered with, when it answered. */
+  readonly upstreamStatus: number | null;
+  constructor(
+    message: string,
+    status = 422,
+    code: FetchRejectedCode = "rejected",
+    upstreamStatus: number | null = null,
+  ) {
     super(message);
     this.name = "FetchRejected";
     this.status = status;
+    this.code = code;
+    this.upstreamStatus = upstreamStatus;
   }
 }
 
@@ -78,15 +107,15 @@ function isPrivateAddress(address: string) {
 
 async function assertPublicUrl(url: URL) {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new FetchRejected(`Only http and https links can be imported.`);
+    throw new FetchRejected(`Only http and https links can be imported.`, 422, "protocol");
   }
 
   const addresses = await dns.lookup(url.hostname, { all: true }).catch(() => {
-    throw new FetchRejected(`Couldn't resolve ${url.hostname}.`);
+    throw new FetchRejected(`Couldn't resolve ${url.hostname}.`, 422, "dns");
   });
 
   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) {
-    throw new FetchRejected(`${url.hostname} resolves to a private address.`, 400);
+    throw new FetchRejected(`${url.hostname} resolves to a private address.`, 400, "private_address");
   }
 }
 
@@ -96,11 +125,13 @@ async function readCapped(response: Response, maxBytes: number) {
   if (declared > maxBytes) {
     throw new FetchRejected(
       `That file is ${(declared / 1e6).toFixed(1)}MB — the limit is ${(maxBytes / 1e6).toFixed(0)}MB.`,
+      422,
+      "too_large",
     );
   }
 
   const reader = response.body?.getReader();
-  if (!reader) throw new FetchRejected("Empty response.");
+  if (!reader) throw new FetchRejected("Empty response.", 422, "empty");
 
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -113,6 +144,8 @@ async function readCapped(response: Response, maxBytes: number) {
       await reader.cancel();
       throw new FetchRejected(
         `That file is over the ${(maxBytes / 1e6).toFixed(0)}MB limit.`,
+        422,
+        "too_large",
       );
     }
     chunks.push(value);
@@ -146,7 +179,7 @@ export async function safeFetch(
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new FetchRejected(`"${rawUrl.slice(0, 80)}" isn't a URL.`, 400);
+    throw new FetchRejected(`"${rawUrl.slice(0, 80)}" isn't a URL.`, 400, "bad_url");
   }
 
   const controller = new AbortController();
@@ -166,14 +199,14 @@ export async function safeFetch(
         },
       }).catch((error: unknown) => {
         if (error instanceof Error && error.name === "AbortError") {
-          throw new FetchRejected(`${url.hostname} took too long to respond.`, 504);
+          throw new FetchRejected(`${url.hostname} took too long to respond.`, 504, "timeout");
         }
-        throw new FetchRejected(`Couldn't reach ${url.hostname}.`, 502);
+        throw new FetchRejected(`Couldn't reach ${url.hostname}.`, 502, "unreachable");
       });
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location) throw new FetchRejected("Redirect with no destination.");
+        if (!location) throw new FetchRejected("Redirect with no destination.", 422, "redirect");
         await response.body?.cancel();
         url = new URL(location, url); // Loop re-checks the new host.
         continue;
@@ -183,6 +216,8 @@ export async function safeFetch(
         throw new FetchRejected(
           `${url.hostname} answered ${response.status}.`,
           response.status === 404 ? 404 : 502,
+          "http",
+          response.status,
         );
       }
 
@@ -193,7 +228,7 @@ export async function safeFetch(
       };
     }
 
-    throw new FetchRejected("Too many redirects.");
+    throw new FetchRejected("Too many redirects.", 422, "redirect");
   } finally {
     clearTimeout(timeout);
   }
