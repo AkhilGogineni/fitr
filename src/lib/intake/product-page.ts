@@ -257,7 +257,8 @@ function metaContent(html: string, ...keys: string[]): string | null {
   return null;
 }
 
-export function extractProduct(html: string, pageUrl: string): ProductMetadata {
+/** Every JSON-LD node on the page, flattened. */
+function readJsonLdNodes(html: string): JsonObject[] {
   const scripts = [
     ...html.matchAll(
       /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
@@ -272,6 +273,11 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
       // A single malformed block is common and shouldn't sink the whole import.
     }
   }
+  return nodes;
+}
+
+export function extractProduct(html: string, pageUrl: string): ProductMetadata {
+  const nodes = readJsonLdNodes(html);
 
   const product =
     nodes.find((node) => hasType(node, "Product")) ??
@@ -344,4 +350,87 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
       metaContent(html, "og:description", "description"),
     reason,
   };
+}
+
+/**
+ * Is this one buyable item, or a page of many?
+ *
+ * Discovery asks for product pages and is sometimes handed a store's homepage,
+ * a collection, or a category grid. Those often carry an `og:image` and an
+ * `og:title`, so `extractProduct` reads them as "ok" — and a homepage then
+ * shows up as a result with the store's hero banner and no price.
+ *
+ * Decided from what the page says about itself first, the URL second:
+ *
+ *   - `product` — exactly one product described: a `Product`/`ProductGroup`
+ *     node (or a few repeats of the same one), `og:type` of product, or a
+ *     `product:price:amount` meta. A page that says it is a product is taken
+ *     at its word, whatever its path looks like.
+ *   - `listing` — the page describes three or more differently-named
+ *     `Product` nodes and does not claim `og:type` product (a grid that
+ *     publishes every tile); or it carries no product evidence at all
+ *     and either declares itself a listing (`CollectionPage`, `ItemList`,
+ *     `SearchResultsPage`), sits at a listing-shaped path (`/`,
+ *     `/collections/x`, `/category/...`, `/search`), or says `og:type`
+ *     website at a path that doesn't look like an item.
+ *   - `unknown` — no product evidence, but nothing that says listing either.
+ *     Left to the caller; discovery keeps these (they're unwatchable at worst)
+ *     rather than throwing away a real product page whose markup is thin.
+ *
+ * The URL alone never decides: `/collections/sale/products/x` is a product
+ * page on Shopify, and plenty of real product pages live at paths no pattern
+ * would guess.
+ */
+export type PageKind = "product" | "listing" | "unknown";
+
+const LISTING_PATH =
+  /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$|^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/)?(?:collections|category|categories|c|shop|search|browse|catalog|catalogsearch)(?:\/[^/]+)*\/?$/i;
+
+const PRODUCT_PATH = /\/(?:products?|p|dp|item|items|pd)\/[^/]+|\.html?$|\/\d{5,}/i;
+
+export function classifyPage(html: string, pageUrl: string): PageKind {
+  const nodes = readJsonLdNodes(html);
+
+  const products = nodes.filter((n) => hasType(n, "Product") || hasType(n, "ProductGroup"));
+  // Variants of one ProductGroup, or the same Product published twice, are
+  // still one item — count names, not nodes.
+  const productNames = new Set(
+    products
+      .filter((n) => !hasType(n, "ProductGroup"))
+      .map((n) => text(n.name, 120)?.toLowerCase() ?? "")
+      .filter(Boolean),
+  );
+  const hasGroup = products.some((n) => hasType(n, "ProductGroup"));
+
+  const ogType = metaContent(html, "og:type")?.toLowerCase() ?? null;
+  const ogSaysProduct = ogType !== null && /product/.test(ogType);
+  const priceMeta = metaContent(html, "product:price:amount", "og:price:amount") !== null;
+
+  // A grid that publishes each tile as a Product. A product page that also
+  // lists related items as Products is protected by its own og:type.
+  const manyProducts = !hasGroup && productNames.size >= 3;
+  if (manyProducts && !ogSaysProduct) return "listing";
+
+  if (products.length > 0 || ogSaysProduct || priceMeta) return "product";
+
+  const declaresListing = nodes.some(
+    (n) => hasType(n, "CollectionPage") || hasType(n, "ItemList") || hasType(n, "SearchResultsPage"),
+  );
+
+  let path = "";
+  try {
+    path = new URL(pageUrl).pathname;
+  } catch {
+    path = "";
+  }
+  const productPath = PRODUCT_PATH.test(path);
+  // `/collections/x/products/y` is an item: the item segment wins.
+  const listingPath = LISTING_PATH.test(path) && !productPath;
+
+  if (declaresListing || listingPath) return "listing";
+  // `og:type` website is what every Shopify homepage and collection says, but
+  // also what a thin product page might say — so it only counts when the path
+  // doesn't look like an item.
+  if (ogType === "website" && !productPath) return "listing";
+  return "unknown";
 }

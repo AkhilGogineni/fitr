@@ -1,6 +1,6 @@
 import "server-only";
 
-import { extractProduct } from "@/lib/intake/product-page";
+import { classifyPage, extractProduct } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 
 /**
@@ -21,6 +21,9 @@ import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
  *   - a page that says nothing product-shaped at all (`no-markup`: no Product
  *     JSON-LD, no og:image, no price, no og:title) is dropped — there is
  *     nothing on it to show, and nothing to confirm it is the item at all;
+ *   - a homepage, collection or category page is dropped (`not_a_product`) —
+ *     decided from the page's own markup first and its path second, see
+ *     `classifyPage`;
  *   - a listing priced in anything but US dollars is dropped — the shopper is
  *     in the United States, and a GBP page is a UK storefront they can't use.
  *     A page that names no currency is kept, and flagged `currencyUnknown`;
@@ -95,6 +98,11 @@ export type Candidate = {
   imageUrl: string | null;
   /** True when the page published no machine-readable price. */
   unwatchable: boolean;
+  /**
+   * `product` when the page described itself as one item; `unknown` when it
+   * said nothing either way. Listings never get this far (`not_a_product`).
+   */
+  pageKind: "product" | "unknown";
   /** The model's one line on why this answers the brief. */
   rationale: string | null;
 };
@@ -121,6 +129,8 @@ export type DropReason =
   | "fetch_rejected"
   /** Reachable, but nothing product-shaped in the HTML (a JS shell or soft 404). */
   | "no_product_markup"
+  /** A homepage, collection or category grid — not one buyable item. */
+  | "not_a_product"
   /** The page states a currency, and it isn't USD. */
   | "non_usd"
   /** Something threw that isn't a fetch refusal — a bug, logged as such. */
@@ -338,12 +348,19 @@ async function verify(proposal: Proposal): Promise<Verified> {
       maxBytes: 3_000_000,
       timeoutMs: VERIFY_TIMEOUT_MS,
     });
-    const product = extractProduct(new TextDecoder().decode(page.body), page.finalUrl);
+    const html = new TextDecoder().decode(page.body);
+    const product = extractProduct(html, page.finalUrl);
 
     // No Product data, no image, no price, no og:title: a JavaScript shell or
     // a soft 404. There is nothing to show and nothing to confirm the link is
     // the item the model said it was.
     if (product.reason === "no-markup") return drop("no_product_markup");
+
+    // A homepage or collection has an og:image and an og:title, so it reads as
+    // "ok" above — but it is a store, not an item. Judged on the final URL,
+    // since a dead product link often redirects to the homepage.
+    const pageKind = classifyPage(html, page.finalUrl);
+    if (pageKind === "listing") return drop("not_a_product");
 
     const currency = product.currency?.trim().toUpperCase() || null;
     if (currency !== null && currency !== "USD") return drop("non_usd");
@@ -366,6 +383,7 @@ async function verify(proposal: Proposal): Promise<Verified> {
         currencyUnknown: currency === null,
         imageUrl: product.imageUrl,
         unwatchable,
+        pageKind,
         rationale: typeof proposal.why === "string" ? proposal.why.slice(0, 200) : null,
       },
     };

@@ -118,6 +118,14 @@ const BRIEFS: SearchBrief[] = [
   },
 ];
 
+/**
+ * A kept result that a shopper could act on: a page that described itself as
+ * one product, with a price, stated in US dollars. A brief "scores" when it
+ * yields at least one.
+ */
+const isPricedUsdProduct = (c: SearchOutcome["candidates"][number]) =>
+  c.pageKind === "product" && c.priceCents !== null && c.currency === "USD";
+
 const usd = (cents: number | null) => (cents === null ? "no price" : `$${(cents / 100).toFixed(2)}`);
 
 function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outcome: SearchOutcome) {
@@ -126,7 +134,9 @@ function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outc
   );
   console.log(
     `    elapsed ${elapsedMs}ms (search ${outcome.timings.searchMs}ms, verify ${outcome.timings.verifyMs}ms)` +
-      ` | proposed ${outcome.proposed} | kept ${outcome.candidates.length} | dropped ${outcome.dropped.length}`,
+      ` | proposed ${outcome.proposed} | kept ${outcome.candidates.length} | dropped ${outcome.dropped.length}` +
+      ` | priced-USD products ${outcome.candidates.filter(isPricedUsdProduct).length}` +
+      ` | scored ${outcome.candidates.some(isPricedUsdProduct) ? "yes" : "no"}`,
   );
   for (const c of outcome.candidates) {
     const price =
@@ -136,7 +146,7 @@ function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outc
           ? `${usd(c.priceCents)} (currency not stated)`
           : `${usd(c.priceCents)} ${c.currency}`;
     console.log(
-      `    KEPT  ${c.title ?? "(untitled)"} | ${c.retailer} | ${price} | ${c.unwatchable ? "unwatchable" : "watchable"}`,
+      `    KEPT  ${c.title ?? "(untitled)"} | ${c.retailer} | ${price} | ${c.unwatchable ? "unwatchable" : "watchable"} | ${c.pageKind} | ${c.url}`,
     );
   }
   for (const d of outcome.dropped) console.log(`    DROP  ${d.reason.padEnd(18)} ${d.url}`);
@@ -149,7 +159,7 @@ async function main() {
   const limit = Number(process.argv[2]) || BRIEFS.length;
   const briefs = BRIEFS.slice(0, limit);
 
-  const totals = { proposed: 0, kept: 0, priced: 0, failed: 0, ms: [] as number[] };
+  const totals = { proposed: 0, kept: 0, priced: 0, failed: 0, scored: 0, ms: [] as number[] };
   const reasons = new Map<string, number>();
   const problems: string[] = [];
 
@@ -166,6 +176,7 @@ async function main() {
       totals.proposed += outcome.proposed;
       totals.kept += outcome.candidates.length;
       totals.priced += outcome.candidates.filter((c) => c.priceCents !== null).length;
+      if (outcome.candidates.some(isPricedUsdProduct)) totals.scored += 1;
       for (const d of outcome.dropped) reasons.set(d.reason, (reasons.get(d.reason) ?? 0) + 1);
 
       // The two defects this probe was written to catch, checked rather than eyeballed.
@@ -184,7 +195,7 @@ async function main() {
 
   const sorted = [...totals.ms].sort((a, b) => a - b);
   console.log("\n=== totals ===");
-  console.log(`briefs ${briefs.length} | failed ${totals.failed}`);
+  console.log(`briefs ${briefs.length} | failed ${totals.failed} | scored ${totals.scored}/${briefs.length}`);
   console.log(
     `elapsed ms: min ${sorted[0]} | median ${sorted[Math.floor(sorted.length / 2)]} | max ${sorted[sorted.length - 1]}`,
   );

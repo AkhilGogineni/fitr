@@ -29,12 +29,66 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
  * Retailers routinely return 403 to anything that looks automated. Presenting a
- * normal browser UA is the difference between JSON-LD and an error page; it is
- * not an attempt to defeat a bot wall, and a site that blocks us anyway is
- * simply reported as unreadable rather than fought.
+ * normal browser request is the difference between JSON-LD and an error page;
+ * it is not an attempt to defeat a bot wall, and a site that blocks us anyway
+ * is simply reported as unreadable rather than fought.
+ *
+ * Calibrated 2026-11-18 against 22 product URLs from a `discovery:probe` run
+ * (11 Shopify stores, 11 chains/others: Uniqlo, J.Crew, Gap, Puma, A&F,
+ * L.L.Bean, Huckberry, Gola, Keds, Quince, Charles Tyrwhitt), every URL
+ * fetched with five header sets, 1.5s apart, in two passes:
+ *
+ *   - Chrome/124 UA + bare accept (the old value): 17 and 14 of 22 answered 200
+ *   - no UA (undici's default):                    16 and 17
+ *   - Chrome/142 UA + bare accept:                 16 and 17
+ *   - Chrome/142 UA + full navigation headers:     18 and 18  <- this
+ *   - an honest bot UA:                            15 and 16
+ *
+ * The navigation set was never worse on any URL, and turned golausa.com's
+ * 403 into a 200 in both passes. Huckberry 403s every variant; the 404s were
+ * the model's invented URLs and 404'd identically under all five.
+ *
+ * Not one 429 appeared — not paced, and not in bursts of 4 and 8 concurrent
+ * requests over the Shopify stores (33 and 55 requests per variant). So the
+ * 429s seen in an earlier probe run were not reproducible as a header effect;
+ * the single Retry-After retry in `safeFetch` is for those, if they recur.
+ *
+ * The `sec-fetch-*` set describes a top-level navigation, so it is only sent
+ * when the caller asked for HTML; image fetches send the UA and their own
+ * `accept` alone.
  */
 const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+
+const DOCUMENT_HEADERS: Record<string, string> = {
+  accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "upgrade-insecure-requests": "1",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "sec-fetch-user": "?1",
+};
+
+function requestHeaders(accept: string): Record<string, string> {
+  const base = { accept, "user-agent": USER_AGENT, "accept-language": "en-US,en;q=0.9" };
+  return accept.includes("text/html") ? { ...base, ...DOCUMENT_HEADERS } : base;
+}
+
+/**
+ * One retry on 429, waiting what `Retry-After` asks, capped — and only if the
+ * wait still fits inside the caller's timeout. A store that wants longer than
+ * this is reported as `http_429`, not waited out.
+ */
+const MAX_RETRY_AFTER_MS = 3_000;
+
+function retryAfterMs(header: string | null): number {
+  if (!header) return 1_000;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(header);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1_000;
+}
 
 /**
  * What kind of refusal it was, as a value rather than a sentence. The message
@@ -183,7 +237,9 @@ export async function safeFetch(
   }
 
   const controller = new AbortController();
+  const deadline = Date.now() + timeoutMs;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let retried429 = false;
 
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -192,11 +248,7 @@ export async function safeFetch(
       const response = await fetch(url, {
         redirect: "manual",
         signal: controller.signal,
-        headers: {
-          accept,
-          "user-agent": USER_AGENT,
-          "accept-language": "en-US,en;q=0.9",
-        },
+        headers: requestHeaders(accept),
       }).catch((error: unknown) => {
         if (error instanceof Error && error.name === "AbortError") {
           throw new FetchRejected(`${url.hostname} took too long to respond.`, 504, "timeout");
@@ -210,6 +262,18 @@ export async function safeFetch(
         await response.body?.cancel();
         url = new URL(location, url); // Loop re-checks the new host.
         continue;
+      }
+
+      if (response.status === 429 && !retried429) {
+        const wait = retryAfterMs(response.headers.get("retry-after"));
+        // Leave at least a second of the budget for the retry itself.
+        if (wait <= MAX_RETRY_AFTER_MS && Date.now() + wait + 1_000 < deadline) {
+          retried429 = true;
+          await response.body?.cancel();
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          hop--; // Same URL again; not a redirect hop.
+          continue;
+        }
       }
 
       if (!response.ok) {
