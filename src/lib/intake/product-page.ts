@@ -369,24 +369,38 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
  *   - `listing` — the page describes three or more differently-named
  *     `Product` nodes and does not claim `og:type` product (a grid that
  *     publishes every tile); or it carries no product evidence at all
- *     and either declares itself a listing (`CollectionPage`, `ItemList`,
- *     `SearchResultsPage`), sits at a listing-shaped path (`/`,
- *     `/collections/x`, `/category/...`, `/search`), or says `og:type`
- *     website at a path that doesn't look like an item.
+ *     and either sits at an unambiguous listing path (`/`, `/en-us/`,
+ *     `/collections/x`, `/search`), or declares itself a listing
+ *     (`CollectionPage`, `SearchResultsPage`, `ItemList`, `og:type` website)
+ *     at a path with no item segment in it.
  *   - `unknown` — no product evidence, but nothing that says listing either.
  *     Left to the caller; discovery keeps these (they're unwatchable at worst)
  *     rather than throwing away a real product page whose markup is thin.
  *
- * The URL alone never decides: `/collections/sale/products/x` is a product
- * page on Shopify, and plenty of real product pages live at paths no pattern
- * would guess.
+ * The URL never makes a page a product, and only a few unambiguous shapes
+ * make one a listing on their own: `/collections/sale/products/x` is a
+ * product page on Shopify, gap.com's items live under `/browse/`, and plenty
+ * of real product pages live at paths no pattern would guess.
  */
 export type PageKind = "product" | "listing" | "unknown";
 
+/**
+ * Paths that are a listing whatever the page says: the storefront root (with
+ * an optional locale like `/en-us/`), a Shopify collection with no item under
+ * it, and search results. Deliberately short. `/shop/`, `/c/`, `/browse/`,
+ * `/category/` are not here — gap.com's items live at `/browse/product.do`,
+ * and plenty of stores put items at `/shop/<slug>` or `/c/<cat>/<item>` — so
+ * those paths only count as a listing alongside page evidence.
+ */
 const LISTING_PATH =
-  /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$|^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/)?(?:collections|category|categories|c|shop|search|browse|catalog|catalogsearch)(?:\/[^/]+)*\/?$/i;
+  /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$|^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/)?(?:collections(?:\/[^/]+)?\/?|search(?:\/.*)?|catalogsearch(?:\/.*)?)$/i;
 
-const PRODUCT_PATH = /\/(?:products?|p|dp|item|items|pd)\/[^/]+|\.html?$|\/\d{5,}/i;
+/**
+ * An item segment anywhere in the path: `/products/x`, `/p/x`, `/dp/x`,
+ * `product.do`, a `.html` page, or a long numeric id (`58231821`).
+ */
+const ITEM_PATH =
+  /\/(?:products?|p|dp|pd|item|items)\/[^/]+|\/product\.do$|\.html?$|\d{5,}/i;
 
 export function classifyPage(html: string, pageUrl: string): PageKind {
   const nodes = readJsonLdNodes(html);
@@ -413,9 +427,10 @@ export function classifyPage(html: string, pageUrl: string): PageKind {
 
   if (products.length > 0 || ogSaysProduct || priceMeta) return "product";
 
-  const declaresListing = nodes.some(
-    (n) => hasType(n, "CollectionPage") || hasType(n, "ItemList") || hasType(n, "SearchResultsPage"),
+  const declaresPage = nodes.some(
+    (n) => hasType(n, "CollectionPage") || hasType(n, "SearchResultsPage"),
   );
+  const declaresList = nodes.some((n) => hasType(n, "ItemList"));
 
   let path = "";
   try {
@@ -423,14 +438,16 @@ export function classifyPage(html: string, pageUrl: string): PageKind {
   } catch {
     path = "";
   }
-  const productPath = PRODUCT_PATH.test(path);
-  // `/collections/x/products/y` is an item: the item segment wins.
-  const listingPath = LISTING_PATH.test(path) && !productPath;
 
-  if (declaresListing || listingPath) return "listing";
-  // `og:type` website is what every Shopify homepage and collection says, but
-  // also what a thin product page might say — so it only counts when the path
-  // doesn't look like an item.
-  if (ogType === "website" && !productPath) return "listing";
+  // An item segment (`/collections/x/products/y`, `/browse/product.do`) wins
+  // over everything but the page explicitly calling itself a collection or
+  // search results. An ItemList alone isn't that — product pages carry them
+  // for "you may also like".
+  if (ITEM_PATH.test(path)) return declaresPage ? "listing" : "unknown";
+
+  if (LISTING_PATH.test(path)) return "listing";
+  // Everything below needs the page to say so. `og:type` website is what
+  // every Shopify homepage and collection says.
+  if (declaresPage || declaresList || ogType === "website") return "listing";
   return "unknown";
 }
