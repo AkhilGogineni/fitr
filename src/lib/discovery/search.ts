@@ -1,6 +1,13 @@
 import "server-only";
 
-import { classifyPage, extractProduct } from "@/lib/intake/product-page";
+import { judgeRelevance, type Relevance } from "@/lib/discovery/relevance";
+import {
+  classifyPage,
+  extractProduct,
+  readCategoryHints,
+  readStock,
+  type Availability,
+} from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 
 /**
@@ -30,7 +37,12 @@ import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
  *   - the price comes from the page, never from the model — a model's price is
  *     a memory of a price;
  *   - a page with no structured price is kept but marked `unwatchable`, so the
- *     price cron skips it rather than starting a scraping arms race.
+ *     price cron skips it rather than starting a scraping arms race;
+ *   - a page whose every offer is out of stock is dropped (`out_of_stock`);
+ *   - a page whose own product name is a different kind of garment from the
+ *     brief is dropped (`off_brief`, see `relevance.ts`);
+ *   - a price over the brief's ceiling is dropped (`over_ceiling`). The ranker
+ *     re-checks the same rule, but doing it here means the drop is counted.
  *
  * **Every drop has a recorded reason** (`SearchOutcome.dropped`). Before that
  * existed, a run that kept 1 of 10 looked identical whether the model invented
@@ -62,6 +74,32 @@ const MAX_VERIFICATIONS = 12;
  * its batch.
  */
 const VERIFY_CONCURRENCY = 4;
+/**
+ * Shopify rate-limits per client IP across *all* its stores, not per store.
+ * Observed 2026-11-18: in one 10-brief probe run 49 of 79 drops were 429s from
+ * ~25 different Shopify stores, every one `Retry-After: 60`; afterwards the IP
+ * stayed throttled for minutes under every header variant, and the
+ * `/products/<handle>.json` and `.js` endpoints were throttled identically
+ * (7 of 8 stores 429 on each), so they are no way around it.
+ *
+ * So every URL shaped like a Shopify product (`/products/<handle>`) goes
+ * through one lane, one request at a time, `SHOPIFY_GAP_MS` apart; every other
+ * host gets a lane of its own, so no two requests hit one host at once.
+ */
+const SHOPIFY_GAP_MS = 750;
+/**
+ * Once throttled, more requests only extend the penalty and each costs a
+ * round trip. After this many 429s in the Shopify lane, the rest of the lane
+ * is dropped as `rate_limited` without being fetched; any other host is
+ * abandoned after its first 429.
+ */
+const SHOPIFY_429_BREAKER = 2;
+/**
+ * Wall-clock budget for the whole verification pass. The page's maxDuration
+ * (200s) has to cover the grounded search (up to 150s) and this; anything not
+ * started by the deadline is `not_verified`.
+ */
+const VERIFY_BUDGET_MS = 40_000;
 /**
  * Per-candidate page fetch. Unchanged from before; measured verification for a
  * whole brief (10 fetches, 4 at a time) took 0.7–5s across 20 probe runs, so
@@ -103,6 +141,10 @@ export type Candidate = {
    * said nothing either way. Listings never get this far (`not_a_product`).
    */
   pageKind: "product" | "unknown";
+  /** From the page's offers; `unknown` when it doesn't say. */
+  availability: Availability;
+  /** `match`, or `unknown` when the page's name names no garment kind. */
+  relevance: Exclude<Relevance, "mismatch">;
   /** The model's one line on why this answers the brief. */
   rationale: string | null;
 };
@@ -115,8 +157,10 @@ export type Candidate = {
 export type DropReason =
   /** The model's "URL" didn't parse, or wasn't http(s). */
   | "bad_url"
-  /** Proposed beyond `MAX_VERIFICATIONS`, so never fetched. */
+  /** Proposed beyond `MAX_VERIFICATIONS`, or not reached inside the verify budget. */
   | "not_verified"
+  /** Not fetched: its lane had already been answered with 429s. */
+  | "rate_limited"
   /** The retailer answered with this (non-2xx) status. */
   | `http_${number}`
   | "timeout"
@@ -131,6 +175,12 @@ export type DropReason =
   | "no_product_markup"
   /** A homepage, collection or category grid — not one buyable item. */
   | "not_a_product"
+  /** Every offer on the page is OutOfStock / SoldOut / Discontinued. */
+  | "out_of_stock"
+  /** The page's product is a different kind of garment from the brief. */
+  | "off_brief"
+  /** Priced, and the price is over the brief's ceiling. */
+  | "over_ceiling"
   /** The page states a currency, and it isn't USD. */
   | "non_usd"
   /** Something threw that isn't a fetch refusal — a bug, logged as such. */
@@ -151,7 +201,10 @@ export type SearchBrief = {
   title: string;
   description?: string | null;
   category?: string | null;
-  /** In cents (USD). The model is told, and the ranker enforces. */
+  /**
+   * In cents (USD). The model is told; `findProducts` drops priced results
+   * over it (`over_ceiling`), and the ranker re-checks.
+   */
   ceilingCents?: number | null;
   /** Brands already in the wardrobe — the ones to steer away from. */
   familiarBrands: string[];
@@ -327,7 +380,7 @@ function dropReasonFor(error: unknown): DropReason {
  * Every outcome is either a candidate or a drop with its reason — never a bare
  * null — so a run that keeps one of ten can say what happened to the other nine.
  */
-async function verify(proposal: Proposal): Promise<Verified> {
+async function verify(proposal: Proposal, brief: SearchBrief): Promise<Verified> {
   const proposedUrl = typeof proposal.url === "string" ? proposal.url : String(proposal.url);
   const drop = (reason: DropReason): Verified => ({
     ok: false,
@@ -362,12 +415,31 @@ async function verify(proposal: Proposal): Promise<Verified> {
     const pageKind = classifyPage(html, page.finalUrl);
     if (pageKind === "listing") return drop("not_a_product");
 
-    const currency = product.currency?.trim().toUpperCase() || null;
+    const stock = readStock(html);
+    if (stock.availability === "out_of_stock") return drop("out_of_stock");
+
+    // The lowest price the item is actually for sale at, when the offers say;
+    // otherwise the one price `extractProduct` read.
+    const priceCents = stock.lowestCents ?? product.priceCents;
+    const rawCurrency = stock.lowestCents !== null ? (stock.currency ?? product.currency) : product.currency;
+    const currency = rawCurrency?.trim().toUpperCase() || null;
     if (currency !== null && currency !== "USD") return drop("non_usd");
+
+    // The page's own name, not the model's: they disagree more than you'd think.
+    const relevance = judgeRelevance(brief, {
+      title: product.title,
+      url: page.finalUrl,
+      hints: readCategoryHints(html),
+    });
+    if (relevance === "mismatch") return drop("off_brief");
+
+    if (brief.ceilingCents && priceCents !== null && priceCents > brief.ceilingCents) {
+      return drop("over_ceiling");
+    }
 
     // `parsePriceToCents` already turns a 0 into null; this is the line that
     // makes such a page unwatchable rather than "free".
-    const unwatchable = product.priceCents === null;
+    const unwatchable = priceCents === null;
 
     return {
       ok: true,
@@ -378,12 +450,14 @@ async function verify(proposal: Proposal): Promise<Verified> {
         title: product.title ?? proposal.title ?? null,
         brand: product.brand ?? proposal.brand ?? null,
         retailer: new URL(page.finalUrl).hostname.replace(/^www\./, ""),
-        priceCents: product.priceCents,
+        priceCents,
         currency,
         currencyUnknown: currency === null,
         imageUrl: product.imageUrl,
         unwatchable,
         pageKind,
+        availability: stock.availability,
+        relevance,
         rationale: typeof proposal.why === "string" ? proposal.why.slice(0, 200) : null,
       },
     };
@@ -394,22 +468,65 @@ async function verify(proposal: Proposal): Promise<Verified> {
   }
 }
 
-/** Runs `verify` over a small pool of workers rather than all at once. */
+/** Which lane a URL is fetched in: all Shopify-shaped product URLs share one. */
+function laneFor(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (/\/products\/[^/]+\/?$/.test(parsed.pathname)) return "shopify";
+    return parsed.hostname.replace(/^www\./, "");
+  } catch {
+    return url;
+  }
+}
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+/**
+ * Runs `verify` with one request per lane at a time (see `SHOPIFY_GAP_MS`),
+ * and at most `VERIFY_CONCURRENCY` lanes at once.
+ */
 async function verifyAll(
   proposals: Proposal[],
+  brief: SearchBrief,
 ): Promise<{ candidates: Candidate[]; dropped: DroppedCandidate[] }> {
   const queue = proposals.slice(0, MAX_VERIFICATIONS);
   const results: Verified[] = new Array(queue.length);
-  let next = 0;
+  const deadline = Date.now() + VERIFY_BUDGET_MS;
 
-  async function worker() {
-    while (next < queue.length) {
-      const index = next++;
-      results[index] = await verify(queue[index]);
+  const lanes = new Map<string, number[]>();
+  queue.forEach((proposal, index) => {
+    const lane = laneFor(String(proposal.url));
+    lanes.set(lane, [...(lanes.get(lane) ?? []), index]);
+  });
+  // The Shopify lane is the long one; start it first.
+  const order = [...lanes.keys()].sort((a, b) => (a === "shopify" ? -1 : b === "shopify" ? 1 : 0));
+
+  async function runLane(lane: string) {
+    const isShopify = lane === "shopify";
+    let throttled = 0;
+    for (const [position, index] of (lanes.get(lane) ?? []).entries()) {
+      const url = String(queue[index].url);
+      if (throttled >= (isShopify ? SHOPIFY_429_BREAKER : 1)) {
+        results[index] = { ok: false, dropped: { url, reason: "rate_limited" } };
+        continue;
+      }
+      if (Date.now() >= deadline) {
+        results[index] = { ok: false, dropped: { url, reason: "not_verified" } };
+        continue;
+      }
+      if (isShopify && position > 0) await sleep(SHOPIFY_GAP_MS);
+      results[index] = await verify(queue[index], brief);
+      const result = results[index];
+      if (!result.ok && result.dropped.reason === "http_429") throttled += 1;
     }
   }
+
+  let nextLane = 0;
+  async function worker() {
+    while (nextLane < order.length) await runLane(order[nextLane++]);
+  }
   await Promise.all(
-    Array.from({ length: Math.min(VERIFY_CONCURRENCY, queue.length) }, worker),
+    Array.from({ length: Math.min(VERIFY_CONCURRENCY, order.length) }, worker),
   );
 
   const candidates: Candidate[] = [];
@@ -439,7 +556,7 @@ export async function findProducts(brief: SearchBrief): Promise<SearchOutcome> {
   const searchStart = Date.now();
   const proposed = await askForCandidates(brief);
   const verifyStart = Date.now();
-  const { candidates, dropped } = await verifyAll(proposed);
+  const { candidates, dropped } = await verifyAll(proposed, brief);
   return {
     candidates,
     proposed: proposed.length,

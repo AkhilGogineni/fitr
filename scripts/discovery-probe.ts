@@ -119,12 +119,20 @@ const BRIEFS: SearchBrief[] = [
 ];
 
 /**
- * A kept result that a shopper could act on: a page that described itself as
- * one product, with a price, stated in US dollars. A brief "scores" when it
- * yields at least one.
+ * A kept result that a shopper could act on — "a plausible, in-stock, buyable
+ * piece": a page that described itself as one product, with a price stated in
+ * US dollars at or under the brief's ceiling, whose offers say in stock, and
+ * whose own product name names the garment the brief asked for. Every clause
+ * must be read off the page; "didn't say" never counts. A brief "scores" when
+ * it yields at least one.
  */
-const isPricedUsdProduct = (c: SearchOutcome["candidates"][number]) =>
-  c.pageKind === "product" && c.priceCents !== null && c.currency === "USD";
+const scores = (brief: SearchBrief, c: SearchOutcome["candidates"][number]) =>
+  c.pageKind === "product" &&
+  c.priceCents !== null &&
+  c.currency === "USD" &&
+  (!brief.ceilingCents || c.priceCents <= brief.ceilingCents) &&
+  c.availability === "in_stock" &&
+  c.relevance === "match";
 
 const usd = (cents: number | null) => (cents === null ? "no price" : `$${(cents / 100).toFixed(2)}`);
 
@@ -135,8 +143,8 @@ function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outc
   console.log(
     `    elapsed ${elapsedMs}ms (search ${outcome.timings.searchMs}ms, verify ${outcome.timings.verifyMs}ms)` +
       ` | proposed ${outcome.proposed} | kept ${outcome.candidates.length} | dropped ${outcome.dropped.length}` +
-      ` | priced-USD products ${outcome.candidates.filter(isPricedUsdProduct).length}` +
-      ` | scored ${outcome.candidates.some(isPricedUsdProduct) ? "yes" : "no"}`,
+      ` | scoring results ${outcome.candidates.filter((c) => scores(brief, c)).length}` +
+      ` | scored ${outcome.candidates.some((c) => scores(brief, c)) ? "yes" : "no"}`,
   );
   for (const c of outcome.candidates) {
     const price =
@@ -146,7 +154,7 @@ function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outc
           ? `${usd(c.priceCents)} (currency not stated)`
           : `${usd(c.priceCents)} ${c.currency}`;
     console.log(
-      `    KEPT  ${c.title ?? "(untitled)"} | ${c.retailer} | ${price} | ${c.unwatchable ? "unwatchable" : "watchable"} | ${c.pageKind} | ${c.url}`,
+      `    KEPT  ${c.title ?? "(untitled)"} | ${c.retailer} | ${price} | ${c.unwatchable ? "unwatchable" : "watchable"} | ${c.pageKind} | stock ${c.availability} | brief ${c.relevance} | ${scores(brief, c) ? "SCORES" : "-"} | ${c.url}`,
     );
   }
   for (const d of outcome.dropped) console.log(`    DROP  ${d.reason.padEnd(18)} ${d.url}`);
@@ -176,7 +184,7 @@ async function main() {
       totals.proposed += outcome.proposed;
       totals.kept += outcome.candidates.length;
       totals.priced += outcome.candidates.filter((c) => c.priceCents !== null).length;
-      if (outcome.candidates.some(isPricedUsdProduct)) totals.scored += 1;
+      if (outcome.candidates.some((c) => scores(brief, c))) totals.scored += 1;
       for (const d of outcome.dropped) reasons.set(d.reason, (reasons.get(d.reason) ?? 0) + 1);
 
       // The two defects this probe was written to catch, checked rather than eyeballed.

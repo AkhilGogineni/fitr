@@ -451,3 +451,123 @@ export function classifyPage(html: string, pageUrl: string): PageKind {
   if (declaresPage || declaresList || ogType === "website") return "listing";
   return "unknown";
 }
+
+/**
+ * Whether the item can be bought, and the cheapest way to buy it.
+ *
+ * `extractProduct` reads one price — the first offer — which is right for
+ * import ("what did I pay") and for the price cron's baseline. Discovery needs
+ * two more things from the same offers: is any of it still for sale, and what
+ * is the lowest price it is for sale at. Observed 2026-11-18: Old Navy and Gap
+ * publish a full `Offer` list in which every entry is `OutOfStock`, at a
+ * clearance price that undercut every ceiling; Naadam publishes a
+ * `ProductGroup` whose variants are a mix of in- and out-of-stock.
+ *
+ *   - `in_stock` — at least one offer says InStock (or LimitedAvailability,
+ *     PreOrder, BackOrder, OnlineOnly, PreSale).
+ *   - `out_of_stock` — offers state an availability and every one of them is
+ *     OutOfStock / SoldOut / Discontinued; or no offer states one and the page
+ *     says in so many words that the item is no longer available.
+ *   - `unknown` — nothing either way. Not treated as out of stock.
+ *
+ * Offers are read from the page's main Product/ProductGroup, its `hasVariant`
+ * list, and any other Product node whose name starts with the main one's
+ * (Shopify themes often publish each variant as its own Product).
+ */
+export type Availability = "in_stock" | "out_of_stock" | "unknown";
+
+export type StockReading = {
+  availability: Availability;
+  /** Lowest positive price among available offers (or all offers, if none says). */
+  lowestCents: number | null;
+  currency: string | null;
+};
+
+const AVAILABLE = /instock|limitedavailability|preorder|presale|backorder|onlineonly|instoreonly/i;
+const UNAVAILABLE = /outofstock|soldout|discontinued/i;
+const GONE_TEXT =
+  /\b(?:this (?:item|product|style) is )?no longer available\b|\bthis (?:item|product) (?:is|has been) discontinued\b/i;
+
+export function readStock(html: string): StockReading {
+  const nodes = readJsonLdNodes(html);
+  const main =
+    nodes.find((node) => hasType(node, "ProductGroup")) ??
+    nodes.find((node) => hasType(node, "Product")) ??
+    null;
+
+  const sources: JsonObject[] = [];
+  if (main) {
+    sources.push(main);
+    const variants = main.hasVariant;
+    for (const variant of Array.isArray(variants) ? variants : variants ? [variants] : []) {
+      if (variant && typeof variant === "object") sources.push(variant as JsonObject);
+    }
+    const mainName = text(main.name, 120)?.toLowerCase();
+    if (mainName) {
+      for (const node of nodes) {
+        if (node === main || !hasType(node, "Product")) continue;
+        if (text(node.name, 120)?.toLowerCase().startsWith(mainName)) sources.push(node);
+      }
+    }
+  }
+
+  type Read = { cents: number | null; currency: string | null; state: "yes" | "no" | "?" };
+  const offers: Read[] = [];
+  for (const source of sources) {
+    for (const offer of flattenJsonLd(source.offers)) {
+      const spec = offer.priceSpecification as JsonObject | undefined;
+      const availability = typeof offer.availability === "string" ? offer.availability : "";
+      offers.push({
+        cents: parsePriceToCents(offer.price ?? offer.lowPrice ?? spec?.price),
+        currency: text(offer.priceCurrency, 3) ?? text(spec?.priceCurrency, 3),
+        state: AVAILABLE.test(availability) ? "yes" : UNAVAILABLE.test(availability) ? "no" : "?",
+      });
+    }
+  }
+
+  const stated = offers.filter((o) => o.state !== "?");
+  let availability: Availability = "unknown";
+  if (stated.some((o) => o.state === "yes")) availability = "in_stock";
+  else if (stated.length > 0) availability = "out_of_stock";
+  else if (GONE_TEXT.test(html.replace(/<script[\s\S]*?<\/script>/gi, ""))) availability = "out_of_stock";
+
+  const pool =
+    availability === "in_stock" ? offers.filter((o) => o.state === "yes") : offers;
+  let lowest: Read | null = null;
+  for (const offer of pool) {
+    if (offer.cents !== null && (lowest === null || offer.cents < (lowest.cents ?? Infinity))) {
+      lowest = offer;
+    }
+  }
+
+  return {
+    availability,
+    lowestCents: lowest?.cents ?? null,
+    currency: lowest?.currency ?? null,
+  };
+}
+
+/**
+ * What the page says the item is filed under: its breadcrumb trail and its
+ * Product `category`. Secondary evidence for discovery's relevance check, for
+ * pages whose product name is a style name ("Gritty Jackson Dry Old") rather
+ * than a description.
+ */
+export function readCategoryHints(html: string): string[] {
+  const hints: string[] = [];
+  for (const node of readJsonLdNodes(html)) {
+    if (hasType(node, "BreadcrumbList") && Array.isArray(node.itemListElement)) {
+      for (const entry of node.itemListElement) {
+        if (!entry || typeof entry !== "object") continue;
+        const item = entry as JsonObject;
+        const name = text(item.name, 80) ?? nameOf(item.item);
+        if (name) hints.push(name);
+      }
+    }
+    if (hasType(node, "Product") || hasType(node, "ProductGroup")) {
+      const category = text(node.category, 120);
+      if (category) hints.push(category);
+    }
+  }
+  return hints;
+}
