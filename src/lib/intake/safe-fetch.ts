@@ -48,10 +48,13 @@ const DEFAULT_TIMEOUT_MS = 10_000;
  * 403 into a 200 in both passes. Huckberry 403s every variant; the 404s were
  * the model's invented URLs and 404'd identically under all five.
  *
- * Not one 429 appeared — not paced, and not in bursts of 4 and 8 concurrent
- * requests over the Shopify stores (33 and 55 requests per variant). So the
- * 429s seen in an earlier probe run were not reproducible as a header effect;
- * the single Retry-After retry in `safeFetch` is for those, if they recur.
+ * Not one 429 appeared in that session — paced, or in bursts of 4 and 8. They
+ * did appear later the same day, after several full probe runs: Shopify then
+ * answered 429 `Retry-After: 60` to every header variant above and to the
+ * `.json`/`.js` product endpoints alike, for over half an hour. So 429s are
+ * per-IP rate limiting, not a header effect, and headers are not the fix;
+ * see `SHOPIFY_GAP_MS` in discovery/search.ts. The single short retry in
+ * `safeFetch` only helps a store asking for a few seconds.
  *
  * The `sec-fetch-*` set describes a top-level navigation, so it is only sent
  * when the caller asked for HTML; image fetches send the UA and their own

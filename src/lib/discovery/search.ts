@@ -542,6 +542,18 @@ async function verifyAll(
   return { candidates, dropped };
 }
 
+/**
+ * Verification alone, for a list of URLs already in hand — what
+ * `scripts/discovery-replay.ts` uses to re-check a probe run's proposals
+ * without spending a grounded-search prompt.
+ */
+export function verifyProposals(
+  urls: string[],
+  brief: SearchBrief,
+): Promise<{ candidates: Candidate[]; dropped: DroppedCandidate[] }> {
+  return verifyAll(urls.map((url) => ({ url })), brief);
+}
+
 export type SearchOutcome = {
   candidates: Candidate[];
   /** How many the model proposed, before verification. */
