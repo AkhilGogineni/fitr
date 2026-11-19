@@ -19,11 +19,14 @@
  *     usually a real product with a brand-ish name, and dropping it would cost
  *     more true matches than it saves.
  *
- * The page's own title is what is judged — never the model's title, and never
- * the URL slug when the page has a title, because they disagree: a Proper
- * Cloth URL whose slug says "oxford-cloth-button-down" served a page titled
- * "Japanese Dark Indigo Chambray Shirt". Only when the title names no kind is
- * secondary evidence read — the page's breadcrumbs and Product `category`,
+ * The page's own names are what is judged — never the model's title, and
+ * never the URL slug when the page names the item, because they disagree: a
+ * Proper Cloth URL whose slug says "oxford-cloth-button-down" served a page
+ * titled "Japanese Dark Indigo Chambray Shirt". The names are tried in order
+ * (JSON-LD Product name, `<title>`, `og:title` — see `readTitles`) and the
+ * first that names a kind decides; Florsheim's og:title "Rucci Lug by
+ * Florsheim Shoes" names none, its `<title>` "Rucci Lug Plain Toe Chelsea
+ * Boot" does. Only when no name names a kind is secondary evidence read — the page's breadcrumbs and Product `category`,
  * then the final URL's path — and that evidence can only turn `unknown` into
  * `match`, never into `mismatch`: Nudie files its jeans under the category
  * "Clothing > Pants", with the breadcrumb "Men's Jeans".
@@ -98,13 +101,14 @@ export function briefKinds(title: string, category?: string | null): Set<string>
 
 export function judgeRelevance(
   brief: { title: string; category?: string | null },
-  page: { title: string | null; url: string; hints?: string[] },
+  page: { titles: (string | null)[]; url: string; hints?: string[] },
 ): Relevance {
   const wanted = briefKinds(brief.title, brief.category);
   if (wanted.size === 0) return "unknown";
 
-  const named = kindsIn(page.title ?? "");
-  if (named.size > 0) {
+  for (const title of page.titles) {
+    const named = kindsIn(title ?? "");
+    if (named.size === 0) continue;
     for (const kind of named) if (wanted.has(kind)) return "match";
     return "mismatch";
   }

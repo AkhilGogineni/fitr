@@ -6,6 +6,7 @@ import {
   extractProduct,
   readCategoryHints,
   readStock,
+  readTitles,
   type Availability,
 } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
@@ -415,7 +416,7 @@ async function verify(proposal: Proposal, brief: SearchBrief): Promise<Verified>
     const pageKind = classifyPage(html, page.finalUrl);
     if (pageKind === "listing") return drop("not_a_product");
 
-    const stock = readStock(html);
+    const stock = readStock(html, page.finalUrl);
     if (stock.availability === "out_of_stock") return drop("out_of_stock");
 
     // The lowest price the item is actually for sale at, when the offers say;
@@ -425,9 +426,9 @@ async function verify(proposal: Proposal, brief: SearchBrief): Promise<Verified>
     const currency = rawCurrency?.trim().toUpperCase() || null;
     if (currency !== null && currency !== "USD") return drop("non_usd");
 
-    // The page's own name, not the model's: they disagree more than you'd think.
+    // The page's own names, not the model's: they disagree more than you'd think.
     const relevance = judgeRelevance(brief, {
-      title: product.title,
+      titles: readTitles(html),
       url: page.finalUrl,
       hints: readCategoryHints(html),
     });
