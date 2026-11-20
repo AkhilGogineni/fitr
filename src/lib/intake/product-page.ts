@@ -93,10 +93,21 @@ function text(value: unknown, maxLength = 200): string | null {
  * when a price-drop alert fires at 3am. Both separators present means the last
  * one is the decimal point; a lone comma with exactly two digits after it is a
  * decimal comma; anything else is a thousands separator.
+ *
+ * **Zero is not a price.** Nothing in a wardrobe costs nothing, so a 0 is a
+ * placeholder, never a reading — and a common one. Observed 2026-11-17 on
+ * seasaltcornwall.com (Magento): a configurable product's JSON-LD carries
+ * `"offers": []`, and the page's `<meta property="product:price:amount">` says
+ * `content="0"`, because the parent of a size/colour set has no price of its
+ * own and the real one is filled in by JavaScript. Read as a number, that 0
+ * sailed under every price ceiling and would have become the price cron's
+ * baseline, after which any real price looks like a rise. So 0, negatives and
+ * anything non-finite come back as null — "this page publishes no price" —
+ * which every caller already treats as unwatchable.
  */
 export function parsePriceToCents(value: unknown): number | null {
   if (typeof value === "number") {
-    return Number.isFinite(value) ? Math.round(value * 100) : null;
+    return Number.isFinite(value) && value > 0 ? Math.round(value * 100) : null;
   }
   if (typeof value !== "string") return null;
 
@@ -123,7 +134,9 @@ export function parsePriceToCents(value: unknown): number | null {
   }
 
   const amount = Number.parseFloat(normalised);
-  return Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  const cents = Number.isFinite(amount) ? Math.round(amount * 100) : null;
+  // A string can still say "0.00", or round to nothing — same rule as above.
+  return cents !== null && cents > 0 ? cents : null;
 }
 
 /** Flattens the shapes JSON-LD arrives in: bare object, array, or `@graph`. */
@@ -244,7 +257,8 @@ function metaContent(html: string, ...keys: string[]): string | null {
   return null;
 }
 
-export function extractProduct(html: string, pageUrl: string): ProductMetadata {
+/** Every JSON-LD node on the page, flattened. */
+function readJsonLdNodes(html: string): JsonObject[] {
   const scripts = [
     ...html.matchAll(
       /<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi,
@@ -259,6 +273,11 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
       // A single malformed block is common and shouldn't sink the whole import.
     }
   }
+  return nodes;
+}
+
+export function extractProduct(html: string, pageUrl: string): ProductMetadata {
+  const nodes = readJsonLdNodes(html);
 
   const product =
     nodes.find((node) => hasType(node, "Product")) ??
@@ -331,4 +350,361 @@ export function extractProduct(html: string, pageUrl: string): ProductMetadata {
       metaContent(html, "og:description", "description"),
     reason,
   };
+}
+
+/**
+ * Is this one buyable item, or a page of many?
+ *
+ * Discovery asks for product pages and is sometimes handed a store's homepage,
+ * a collection, or a category grid. Those often carry an `og:image` and an
+ * `og:title`, so `extractProduct` reads them as "ok" — and a homepage then
+ * shows up as a result with the store's hero banner and no price.
+ *
+ * Decided from what the page says about itself first, the URL second:
+ *
+ *   - `product` — exactly one product described: a `Product`/`ProductGroup`
+ *     node (or a few repeats of the same one), `og:type` of product, or a
+ *     `product:price:amount` meta. A page that says it is a product is taken
+ *     at its word, whatever its path looks like.
+ *   - `listing` — the page describes three or more differently-named
+ *     `Product` nodes and does not claim `og:type` product (a grid that
+ *     publishes every tile); or it carries no product evidence at all
+ *     and either sits at an unambiguous listing path (`/`, `/en-us/`,
+ *     `/collections/x`, `/search`), or declares itself a listing
+ *     (`CollectionPage`, `SearchResultsPage`, `ItemList`, `og:type` website)
+ *     at a path with no item segment in it and without a single purchase
+ *     control (one add-to-cart form or one or two buy buttons), which counts
+ *     as product evidence off the unambiguous listing paths.
+ *   - `unknown` — no product evidence, but nothing that says listing either.
+ *     Left to the caller; discovery keeps these (they're unwatchable at worst)
+ *     rather than throwing away a real product page whose markup is thin.
+ *
+ * The URL never makes a page a product, and only a few unambiguous shapes
+ * make one a listing on their own: `/collections/sale/products/x` is a
+ * product page on Shopify, gap.com's items live under `/browse/`, and plenty
+ * of real product pages live at paths no pattern would guess.
+ */
+export type PageKind = "product" | "listing" | "unknown";
+
+/**
+ * Paths that are a listing whatever the page says: the storefront root (with
+ * an optional locale like `/en-us/`), a Shopify collection with no item under
+ * it, and search results. Deliberately short. `/shop/`, `/c/`, `/browse/`,
+ * `/category/` are not here — gap.com's items live at `/browse/product.do`,
+ * and plenty of stores put items at `/shop/<slug>` or `/c/<cat>/<item>` — so
+ * those paths only count as a listing alongside page evidence.
+ */
+const LISTING_PATH =
+  /^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/?)?$|^\/(?:[a-z]{2}(?:[-_][a-z]{2})?\/)?(?:collections(?:\/[^/]+)?\/?|search(?:\/.*)?|catalogsearch(?:\/.*)?)$/i;
+
+/**
+ * An item segment anywhere in the path: `/products/x`, `/p/x`, `/dp/x`,
+ * `product.do`, a `.html` page, or a long numeric id (`58231821`).
+ */
+const ITEM_PATH =
+  /\/(?:products?|p|dp|pd|item|items)\/[^/]+|\/product\.do$|\.html?$|\d{5,}/i;
+
+/**
+ * True when the page has exactly one Shopify add-to-cart form, or one or two
+ * visible buy buttons ("Add to cart", "Add to bag", "Pre-order", "Buy now") —
+ * a product page's main button plus, often, its sticky-header copy. Measured
+ * 2026-11-19 on 47 cached product pages (1–5 buttons, most 1–2) and 10
+ * category/home pages (0, or 48).
+ */
+function singlePurchaseControl(html: string): boolean {
+  const cartForms = html.match(/<form[^>]+action=["'][^"']*\/cart\/add/gi)?.length ?? 0;
+  if (cartForms === 1) return true;
+  const visible = html.replace(/<script[\s\S]*?<\/script>/gi, "").replace(/<style[\s\S]*?<\/style>/gi, "");
+  const buttons =
+    visible.match(/>\s*(?:add to (?:cart|bag)|pre-?order(?: now)?|buy now)\b/gi)?.length ?? 0;
+  return buttons >= 1 && buttons <= 2;
+}
+
+export function classifyPage(html: string, pageUrl: string): PageKind {
+  const nodes = readJsonLdNodes(html);
+
+  const products = nodes.filter((n) => hasType(n, "Product") || hasType(n, "ProductGroup"));
+  // Variants of one ProductGroup, or the same Product published twice, are
+  // still one item — count names, not nodes.
+  const productNames = new Set(
+    products
+      .filter((n) => !hasType(n, "ProductGroup"))
+      .map((n) => text(n.name, 120)?.toLowerCase() ?? "")
+      .filter(Boolean),
+  );
+  const hasGroup = products.some((n) => hasType(n, "ProductGroup"));
+
+  const ogType = metaContent(html, "og:type")?.toLowerCase() ?? null;
+  const ogSaysProduct = ogType !== null && /product/.test(ogType);
+  const priceMeta = metaContent(html, "product:price:amount", "og:price:amount") !== null;
+
+  // A grid that publishes each tile as a Product. A product page that also
+  // lists related items as Products is protected by its own og:type.
+  const manyProducts = !hasGroup && productNames.size >= 3;
+  if (manyProducts && !ogSaysProduct) return "listing";
+
+  if (products.length > 0 || ogSaysProduct || priceMeta) return "product";
+
+  const declaresPage = nodes.some(
+    (n) => hasType(n, "CollectionPage") || hasType(n, "SearchResultsPage"),
+  );
+  const declaresList = nodes.some((n) => hasType(n, "ItemList"));
+
+  let path = "";
+  try {
+    path = new URL(pageUrl).pathname;
+  } catch {
+    path = "";
+  }
+
+  // An item segment (`/collections/x/products/y`, `/browse/product.do`) wins
+  // over everything but the page explicitly calling itself a collection or
+  // search results. An ItemList alone isn't that — product pages carry them
+  // for "you may also like".
+  if (ITEM_PATH.test(path)) {
+    if (declaresPage) return "listing";
+    return singlePurchaseControl(html) ? "product" : "unknown";
+  }
+
+  if (LISTING_PATH.test(path)) return "listing";
+
+  // One way to buy one thing. Gustin's jeans pages carry no JSON-LD, say
+  // og:type website, and still have a single "Pre-order now for $99" button.
+  // Grids have none (a collection links to items) or dozens (quick-add on
+  // every tile; 48 on a Madewell category page). Not trusted on the paths
+  // above: a homepage's single featured-product form doesn't make it an item.
+  if (!declaresPage && singlePurchaseControl(html)) return "product";
+
+  // Everything below needs the page to say so. `og:type` website is what
+  // every Shopify homepage and collection says.
+  if (declaresPage || declaresList || ogType === "website") return "listing";
+  return "unknown";
+}
+
+/**
+ * Whether the item can be bought now, and what it costs.
+ *
+ * `extractProduct` reads one price — the first offer — which is right for
+ * import ("what did I pay") and for the price cron's baseline. Discovery needs
+ * more from the same offers. Observed 2026-11-18/19:
+ *
+ *   - Old Navy and Gap publish full `Offer` lists in which every entry is
+ *     `OutOfStock`, at clearance prices that undercut every ceiling;
+ *   - Naadam publishes a `ProductGroup` whose variants mix in- and
+ *     out-of-stock;
+ *   - Puma publishes one `ProductGroup` with a variant per colour, each its
+ *     own price ($51.99 white, $44.99 black) — so "the lowest offer on the
+ *     page" was the price of a shoe the link doesn't point at;
+ *   - Gustin's jeans are `PreOrder` ("51% funded, ships Jan/Feb 2027").
+ *
+ * **Which offers count.** The ones for the item the URL points at: offers
+ * whose own `url` is the page URL, or that belong to a Product/variant whose
+ * `url` is the page URL; failing that, offers whose URL or `sku` carries the
+ * page URL's `variant=` id (Shopify's selected-variant parameter); failing
+ * that, every offer of the main product and its variants.
+ *
+ * **Availability**, over those offers:
+ *
+ *   - `in_stock` — at least one says InStock, LimitedAvailability, OnlineOnly
+ *     or InStoreOnly.
+ *   - `preorder` — none in stock, at least one PreOrder, PreSale or BackOrder.
+ *     BackOrder is grouped here deliberately: like a pre-order, it can be
+ *     ordered but not shipped, on a date the page doesn't promise, and "in
+ *     stock" is the thing a shopper is being told.
+ *   - `out_of_stock` — offers state an availability and every one is
+ *     OutOfStock / SoldOut / Discontinued; or no offer states one and the page
+ *     says in so many words that the item is no longer available.
+ *   - When no offer states one and the page doesn't say it's gone, an element
+ *     reading exactly "In stock" counts as `in_stock` (Florsheim).
+ *   - `unknown` — nothing either way. Not treated as out of stock.
+ *
+ * The price is the lowest among the offers that set the verdict: in-stock
+ * offers for `in_stock`, pre-order offers for `preorder`, all of them
+ * otherwise.
+ */
+export type Availability = "in_stock" | "preorder" | "out_of_stock" | "unknown";
+
+export type StockReading = {
+  availability: Availability;
+  /** Lowest positive price among the offers that decided `availability`. */
+  lowestCents: number | null;
+  currency: string | null;
+  /** Whether the offers were narrowed to the page URL's own item. */
+  matchedUrl: boolean;
+};
+
+const IN_STOCK = /instock|limitedavailability|onlineonly|instoreonly/i;
+const LATER = /preorder|presale|backorder/i;
+const UNAVAILABLE = /outofstock|soldout|discontinued/i;
+/**
+ * An element whose whole text is "In stock" — Florsheim's per-size stock
+ * label, with no JSON-LD at all. Only consulted when no offer states an
+ * availability; "Only 3 left in stock" and the like don't match.
+ */
+const IN_STOCK_TEXT = />\s*in stock\s*</i;
+const GONE_TEXT =
+  /\b(?:this (?:item|product|style) is )?no longer available\b|\bthis (?:item|product) (?:is|has been) discontinued\b/i;
+
+/** A URL with its fragment and any trailing slash dropped, for comparing. */
+function comparableUrl(value: unknown, base: string): string | null {
+  if (typeof value !== "string" || !value) return null;
+  try {
+    const url = new URL(decodeEntities(value), base);
+    url.hash = "";
+    url.pathname = url.pathname.replace(/\/+$/, "") || "/";
+    return url.href;
+  } catch {
+    return null;
+  }
+}
+
+export function readStock(html: string, pageUrl: string): StockReading {
+  const nodes = readJsonLdNodes(html);
+  const main =
+    nodes.find((node) => hasType(node, "ProductGroup")) ??
+    nodes.find((node) => hasType(node, "Product")) ??
+    null;
+
+  const sources: JsonObject[] = [];
+  if (main) {
+    sources.push(main);
+    const variants = main.hasVariant;
+    for (const variant of Array.isArray(variants) ? variants : variants ? [variants] : []) {
+      if (variant && typeof variant === "object") sources.push(variant as JsonObject);
+    }
+    const mainName = text(main.name, 120)?.toLowerCase();
+    if (mainName) {
+      for (const node of nodes) {
+        if (sources.includes(node) || !hasType(node, "Product")) continue;
+        if (text(node.name, 120)?.toLowerCase().startsWith(mainName)) sources.push(node);
+      }
+    }
+  }
+
+  type State = "now" | "later" | "no" | "?";
+  type Read = {
+    cents: number | null;
+    currency: string | null;
+    state: State;
+    url: string | null;
+    sourceUrl: string | null;
+    sku: string | null;
+  };
+  const offers: Read[] = [];
+  for (const source of sources) {
+    const sourceUrl = comparableUrl(source.url, pageUrl);
+    for (const offer of flattenJsonLd(source.offers)) {
+      const spec = offer.priceSpecification as JsonObject | undefined;
+      const availability = typeof offer.availability === "string" ? offer.availability : "";
+      offers.push({
+        cents: parsePriceToCents(offer.price ?? offer.lowPrice ?? spec?.price),
+        currency: text(offer.priceCurrency, 3) ?? text(spec?.priceCurrency, 3),
+        state: IN_STOCK.test(availability)
+          ? "now"
+          : LATER.test(availability)
+            ? "later"
+            : UNAVAILABLE.test(availability)
+              ? "no"
+              : "?",
+        url: comparableUrl(offer.url, pageUrl),
+        sourceUrl,
+        sku: text(offer.sku, 60) ?? text(source.sku, 60),
+      });
+    }
+  }
+
+  const page = comparableUrl(pageUrl, pageUrl);
+  let pool = offers.filter((o) => page !== null && (o.url === page || o.sourceUrl === page));
+  if (pool.length === 0) {
+    let variantId: string | null = null;
+    try {
+      variantId = new URL(pageUrl).searchParams.get("variant");
+    } catch {
+      variantId = null;
+    }
+    if (variantId) {
+      pool = offers.filter(
+        (o) => o.sku === variantId || (o.url !== null && o.url.includes(`variant=${variantId}`)),
+      );
+    }
+  }
+  const matchedUrl = pool.length > 0;
+  if (!matchedUrl) pool = offers;
+
+  const stated = pool.filter((o) => o.state !== "?");
+  let availability: Availability = "unknown";
+  if (stated.some((o) => o.state === "now")) availability = "in_stock";
+  else if (stated.some((o) => o.state === "later")) availability = "preorder";
+  else if (stated.length > 0) availability = "out_of_stock";
+  else {
+    const visible = html.replace(/<script[\s\S]*?<\/script>/gi, "");
+    if (GONE_TEXT.test(visible)) availability = "out_of_stock";
+    else if (IN_STOCK_TEXT.test(visible)) availability = "in_stock";
+  }
+
+  const deciding =
+    availability === "in_stock"
+      ? pool.filter((o) => o.state === "now")
+      : availability === "preorder"
+        ? pool.filter((o) => o.state === "later")
+        : pool;
+  let lowest: Read | null = null;
+  for (const offer of deciding) {
+    if (offer.cents !== null && (lowest === null || offer.cents < (lowest.cents ?? Infinity))) {
+      lowest = offer;
+    }
+  }
+
+  return {
+    availability,
+    lowestCents: lowest?.cents ?? null,
+    currency: lowest?.currency ?? null,
+    matchedUrl,
+  };
+}
+
+/**
+ * What the page says the item is filed under: its breadcrumb trail and its
+ * Product `category`. Secondary evidence for discovery's relevance check, for
+ * pages whose product name is a style name ("Gritty Jackson Dry Old") rather
+ * than a description.
+ */
+export function readCategoryHints(html: string): string[] {
+  const hints: string[] = [];
+  for (const node of readJsonLdNodes(html)) {
+    if (hasType(node, "BreadcrumbList") && Array.isArray(node.itemListElement)) {
+      for (const entry of node.itemListElement) {
+        if (!entry || typeof entry !== "object") continue;
+        const item = entry as JsonObject;
+        const name = text(item.name, 80) ?? nameOf(item.item);
+        if (name) hints.push(name);
+      }
+    }
+    if (hasType(node, "Product") || hasType(node, "ProductGroup")) {
+      const category = text(node.category, 120);
+      if (category) hints.push(category);
+    }
+  }
+  return hints;
+}
+
+/**
+ * The page's own names for the item, most specific first: the JSON-LD
+ * Product name, the `<title>`, then `og:title`. They are not interchangeable —
+ * Florsheim's `og:title` is "Rucci Lug by Florsheim Shoes" while its `<title>`
+ * is "Rucci Lug Plain Toe Chelsea Boot" — so a caller that needs the name to
+ * *say* something (discovery's relevance check) tries each in turn.
+ */
+export function readTitles(html: string): string[] {
+  const nodes = readJsonLdNodes(html);
+  const product =
+    nodes.find((node) => hasType(node, "Product")) ??
+    nodes.find((node) => hasType(node, "ProductGroup")) ??
+    null;
+  const candidates = [
+    text(product?.name, 120),
+    text(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1], 120),
+    metaContent(html, "og:title", "twitter:title"),
+  ];
+  return [...new Set(candidates.filter((title): title is string => title !== null))];
 }

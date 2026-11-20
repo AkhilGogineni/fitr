@@ -29,19 +29,105 @@ const DEFAULT_TIMEOUT_MS = 10_000;
 
 /**
  * Retailers routinely return 403 to anything that looks automated. Presenting a
- * normal browser UA is the difference between JSON-LD and an error page; it is
- * not an attempt to defeat a bot wall, and a site that blocks us anyway is
- * simply reported as unreadable rather than fought.
+ * normal browser request is the difference between JSON-LD and an error page;
+ * it is not an attempt to defeat a bot wall, and a site that blocks us anyway
+ * is simply reported as unreadable rather than fought.
+ *
+ * Calibrated 2026-11-18 against 22 product URLs from a `discovery:probe` run
+ * (11 Shopify stores, 11 chains/others: Uniqlo, J.Crew, Gap, Puma, A&F,
+ * L.L.Bean, Huckberry, Gola, Keds, Quince, Charles Tyrwhitt), every URL
+ * fetched with five header sets, 1.5s apart, in two passes:
+ *
+ *   - Chrome/124 UA + bare accept (the old value): 17 and 14 of 22 answered 200
+ *   - no UA (undici's default):                    16 and 17
+ *   - Chrome/142 UA + bare accept:                 16 and 17
+ *   - Chrome/142 UA + full navigation headers:     18 and 18  <- this
+ *   - an honest bot UA:                            15 and 16
+ *
+ * The navigation set was never worse on any URL, and turned golausa.com's
+ * 403 into a 200 in both passes. Huckberry 403s every variant; the 404s were
+ * the model's invented URLs and 404'd identically under all five.
+ *
+ * Not one 429 appeared in that session — paced, or in bursts of 4 and 8. They
+ * did appear later the same day, after several full probe runs: Shopify then
+ * answered 429 `Retry-After: 60` to every header variant above and to the
+ * `.json`/`.js` product endpoints alike, for over half an hour. So 429s are
+ * per-IP rate limiting, not a header effect, and headers are not the fix;
+ * see `SHOPIFY_GAP_MS` in discovery/search.ts. The single short retry in
+ * `safeFetch` only helps a store asking for a few seconds.
+ *
+ * The `sec-fetch-*` set describes a top-level navigation, so it is only sent
+ * when the caller asked for HTML; image fetches send the UA and their own
+ * `accept` alone.
  */
 const USER_AGENT =
-  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36";
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36";
+
+const DOCUMENT_HEADERS: Record<string, string> = {
+  accept:
+    "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8",
+  "upgrade-insecure-requests": "1",
+  "sec-fetch-dest": "document",
+  "sec-fetch-mode": "navigate",
+  "sec-fetch-site": "none",
+  "sec-fetch-user": "?1",
+};
+
+function requestHeaders(accept: string): Record<string, string> {
+  const base = { accept, "user-agent": USER_AGENT, "accept-language": "en-US,en;q=0.9" };
+  return accept.includes("text/html") ? { ...base, ...DOCUMENT_HEADERS } : base;
+}
+
+/**
+ * One retry on 429, waiting what `Retry-After` asks, capped — and only if the
+ * wait still fits inside the caller's timeout. A store that wants longer than
+ * this is reported as `http_429`, not waited out.
+ */
+const MAX_RETRY_AFTER_MS = 3_000;
+
+function retryAfterMs(header: string | null): number {
+  if (!header) return 1_000;
+  const seconds = Number(header);
+  if (Number.isFinite(seconds)) return Math.max(0, seconds * 1_000);
+  const date = Date.parse(header);
+  return Number.isFinite(date) ? Math.max(0, date - Date.now()) : 1_000;
+}
+
+/**
+ * What kind of refusal it was, as a value rather than a sentence. The message
+ * is for people; this is for code that has to count failures — discovery
+ * reports why each candidate it dropped was dropped, and "the message said
+ * 'took too long'" is not something to branch on.
+ */
+export type FetchRejectedCode =
+  | "bad_url"
+  | "protocol"
+  | "dns"
+  | "private_address"
+  | "timeout"
+  | "unreachable"
+  | "redirect"
+  | "http"
+  | "too_large"
+  | "empty"
+  | "rejected";
 
 export class FetchRejected extends Error {
   readonly status: number;
-  constructor(message: string, status = 422) {
+  readonly code: FetchRejectedCode;
+  /** The status the remote server actually answered with, when it answered. */
+  readonly upstreamStatus: number | null;
+  constructor(
+    message: string,
+    status = 422,
+    code: FetchRejectedCode = "rejected",
+    upstreamStatus: number | null = null,
+  ) {
     super(message);
     this.name = "FetchRejected";
     this.status = status;
+    this.code = code;
+    this.upstreamStatus = upstreamStatus;
   }
 }
 
@@ -78,15 +164,15 @@ function isPrivateAddress(address: string) {
 
 async function assertPublicUrl(url: URL) {
   if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new FetchRejected(`Only http and https links can be imported.`);
+    throw new FetchRejected(`Only http and https links can be imported.`, 422, "protocol");
   }
 
   const addresses = await dns.lookup(url.hostname, { all: true }).catch(() => {
-    throw new FetchRejected(`Couldn't resolve ${url.hostname}.`);
+    throw new FetchRejected(`Couldn't resolve ${url.hostname}.`, 422, "dns");
   });
 
   if (addresses.length === 0 || addresses.some((a) => isPrivateAddress(a.address))) {
-    throw new FetchRejected(`${url.hostname} resolves to a private address.`, 400);
+    throw new FetchRejected(`${url.hostname} resolves to a private address.`, 400, "private_address");
   }
 }
 
@@ -96,11 +182,13 @@ async function readCapped(response: Response, maxBytes: number) {
   if (declared > maxBytes) {
     throw new FetchRejected(
       `That file is ${(declared / 1e6).toFixed(1)}MB — the limit is ${(maxBytes / 1e6).toFixed(0)}MB.`,
+      422,
+      "too_large",
     );
   }
 
   const reader = response.body?.getReader();
-  if (!reader) throw new FetchRejected("Empty response.");
+  if (!reader) throw new FetchRejected("Empty response.", 422, "empty");
 
   const chunks: Uint8Array[] = [];
   let total = 0;
@@ -113,6 +201,8 @@ async function readCapped(response: Response, maxBytes: number) {
       await reader.cancel();
       throw new FetchRejected(
         `That file is over the ${(maxBytes / 1e6).toFixed(0)}MB limit.`,
+        422,
+        "too_large",
       );
     }
     chunks.push(value);
@@ -146,11 +236,13 @@ export async function safeFetch(
   try {
     url = new URL(rawUrl);
   } catch {
-    throw new FetchRejected(`"${rawUrl.slice(0, 80)}" isn't a URL.`, 400);
+    throw new FetchRejected(`"${rawUrl.slice(0, 80)}" isn't a URL.`, 400, "bad_url");
   }
 
   const controller = new AbortController();
+  const deadline = Date.now() + timeoutMs;
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  let retried429 = false;
 
   try {
     for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
@@ -159,30 +251,40 @@ export async function safeFetch(
       const response = await fetch(url, {
         redirect: "manual",
         signal: controller.signal,
-        headers: {
-          accept,
-          "user-agent": USER_AGENT,
-          "accept-language": "en-US,en;q=0.9",
-        },
+        headers: requestHeaders(accept),
       }).catch((error: unknown) => {
         if (error instanceof Error && error.name === "AbortError") {
-          throw new FetchRejected(`${url.hostname} took too long to respond.`, 504);
+          throw new FetchRejected(`${url.hostname} took too long to respond.`, 504, "timeout");
         }
-        throw new FetchRejected(`Couldn't reach ${url.hostname}.`, 502);
+        throw new FetchRejected(`Couldn't reach ${url.hostname}.`, 502, "unreachable");
       });
 
       if (response.status >= 300 && response.status < 400) {
         const location = response.headers.get("location");
-        if (!location) throw new FetchRejected("Redirect with no destination.");
+        if (!location) throw new FetchRejected("Redirect with no destination.", 422, "redirect");
         await response.body?.cancel();
         url = new URL(location, url); // Loop re-checks the new host.
         continue;
+      }
+
+      if (response.status === 429 && !retried429) {
+        const wait = retryAfterMs(response.headers.get("retry-after"));
+        // Leave at least a second of the budget for the retry itself.
+        if (wait <= MAX_RETRY_AFTER_MS && Date.now() + wait + 1_000 < deadline) {
+          retried429 = true;
+          await response.body?.cancel();
+          await new Promise((resolve) => setTimeout(resolve, wait));
+          hop--; // Same URL again; not a redirect hop.
+          continue;
+        }
       }
 
       if (!response.ok) {
         throw new FetchRejected(
           `${url.hostname} answered ${response.status}.`,
           response.status === 404 ? 404 : 502,
+          "http",
+          response.status,
         );
       }
 
@@ -193,7 +295,7 @@ export async function safeFetch(
       };
     }
 
-    throw new FetchRejected("Too many redirects.");
+    throw new FetchRejected("Too many redirects.", 422, "redirect");
   } finally {
     clearTimeout(timeout);
   }

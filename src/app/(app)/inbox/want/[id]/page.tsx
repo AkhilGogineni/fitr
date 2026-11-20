@@ -25,6 +25,18 @@ import { WantPanel } from "./want-panel";
 export const metadata = { title: "Want" };
 
 /**
+ * Seconds. Covers the server actions this page calls, which in this Next
+ * version is set here at page level (route-segment `maxDuration` docs, "Server
+ * Actions"). `runDiscovery` is the reason: a grounded search allowed 150s
+ * (`GROUNDED_TIMEOUT_MS` in lib/discovery/search.ts, from measured runs of up
+ * to 94s), then verification — up to 3 rounds of 8s fetches, measured at
+ * 0.7–5s — then a few Supabase writes. 200 leaves room for all of that and
+ * stays under 300s, the Vercel function default this was sized against (taken
+ * from the plan, not re-checked against the account's plan limits).
+ */
+export const maxDuration = 200;
+
+/**
  * One want: what it is, what the web has, and whether it works with the closet.
  *
  * The fit check runs on every render rather than being read from
