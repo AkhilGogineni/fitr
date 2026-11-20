@@ -3,6 +3,16 @@
  *
  *     npm run discovery:probe
  *     npm run discovery:probe -- 3        # only the first three briefs
+ *     npm run discovery:probe -- --remote https://<preview>.vercel.app [3]
+ *
+ * **Remote mode** runs each brief on a deployment instead of this machine —
+ * one request per brief to `/api/dev/discovery-probe?brief=N`, sequentially,
+ * with `Authorization: Bearer $PROBE_SECRET` (from `.env.local`). The fetches
+ * then come from the deployment's network, which matters: Shopify rate-limits
+ * per client IP across all its stores, and a laptop that has run a few probes
+ * is throttled for an hour. Output and scoring are the same as local mode
+ * (`probe-briefs.ts` holds both), plus the HTTP status per brief; a brief
+ * whose request fails is reported as failed, never scored.
  *
  * Runs `findProducts` — the real grounded search plus the real verification
  * fetches — over a fixed set of realistic briefs, and prints for each one how
@@ -25,7 +35,11 @@ import fs from "node:fs";
 import Module from "node:module";
 import path from "node:path";
 
+import { BRIEFS, scores } from "@/lib/discovery/probe-briefs";
 import type { SearchBrief, SearchOutcome } from "@/lib/discovery/search";
+
+/** The route's maxDuration (200s) plus room for the network either side. */
+const REMOTE_TIMEOUT_MS = 230_000;
 
 const SHIM_ROOT = path.resolve(__dirname, "../node_modules/.cache/discovery-probe");
 
@@ -43,96 +57,6 @@ function installServerOnlyShim() {
   // long-stable, and only ever used here, in a dev script.
   (Module as unknown as { _initPaths: () => void })._initPaths();
 }
-
-/** US shopper, US prices. Ceilings in cents, as `profiles.price_ceilings` stores them. */
-const BRIEFS: SearchBrief[] = [
-  {
-    title: "Oversized cream cable-knit sweater",
-    description: "chunky wool, crew neck",
-    category: "top",
-    ceilingCents: 12_000,
-    familiarBrands: [],
-  },
-  {
-    title: "Heavyweight plain white t-shirt",
-    description: "boxy fit, thick cotton, no logo",
-    category: "top",
-    ceilingCents: 5_000,
-    familiarBrands: ["uniqlo"],
-  },
-  {
-    title: "Navy oxford cloth button-down shirt",
-    description: "slim but not skinny, real button-down collar",
-    category: "top",
-    ceilingCents: 9_000,
-    familiarBrands: [],
-  },
-  {
-    title: "Straight-leg raw selvedge denim jeans",
-    description: "dark indigo, mid rise",
-    category: "bottom",
-    ceilingCents: 20_000,
-    familiarBrands: ["levi's"],
-  },
-  {
-    title: "Olive pleated wide-leg chinos",
-    description: "cotton twill, relaxed through the thigh",
-    category: "bottom",
-    ceilingCents: 11_000,
-    familiarBrands: [],
-  },
-  {
-    title: "White leather low-top sneakers",
-    description: "minimal, no big branding",
-    category: "shoes",
-    ceilingCents: 15_000,
-    familiarBrands: ["nike", "adidas"],
-  },
-  {
-    title: "Brown suede chelsea boots",
-    description: "pull-on, elastic side panels",
-    category: "shoes",
-    ceilingCents: 25_000,
-    familiarBrands: [],
-  },
-  {
-    title: "Waxed cotton field jacket",
-    description: "olive or tan, corduroy collar",
-    category: "outerwear",
-    ceilingCents: 30_000,
-    familiarBrands: [],
-  },
-  {
-    title: "Black lightweight packable down jacket",
-    description: "for layering, no hood",
-    category: "outerwear",
-    ceilingCents: 18_000,
-    familiarBrands: ["patagonia"],
-  },
-  {
-    title: "Merino wool beanie",
-    description: "charcoal, ribbed, cuffed",
-    category: "accessory",
-    ceilingCents: 4_000,
-    familiarBrands: [],
-  },
-];
-
-/**
- * A kept result that a shopper could act on — "a plausible, in-stock, buyable
- * piece": a page that described itself as one product, with a price stated in
- * US dollars at or under the brief's ceiling, whose offers say in stock, and
- * whose own product name names the garment the brief asked for. Every clause
- * must be read off the page; "didn't say" never counts. A brief "scores" when
- * it yields at least one.
- */
-const scores = (brief: SearchBrief, c: SearchOutcome["candidates"][number]) =>
-  c.pageKind === "product" &&
-  c.priceCents !== null &&
-  c.currency === "USD" &&
-  (!brief.ceilingCents || c.priceCents <= brief.ceilingCents) &&
-  c.availability === "in_stock" &&
-  c.relevance === "match";
 
 const usd = (cents: number | null) => (cents === null ? "no price" : `$${(cents / 100).toFixed(2)}`);
 
@@ -160,12 +84,70 @@ function printOutcome(index: number, brief: SearchBrief, elapsedMs: number, outc
   for (const d of outcome.dropped) console.log(`    DROP  ${d.reason.padEnd(18)} ${d.url}`);
 }
 
-async function main() {
-  installServerOnlyShim();
-  const { findProducts } = await import("@/lib/discovery/search");
+type BriefRun =
+  | { ok: true; outcome: SearchOutcome; elapsedMs: number; note?: string }
+  | { ok: false; elapsedMs: number; reason: string };
 
-  const limit = Number(process.argv[2]) || BRIEFS.length;
+/** Local: `findProducts` in this process. */
+async function runLocal(brief: SearchBrief): Promise<BriefRun> {
+  const { findProducts } = await import("@/lib/discovery/search");
+  const start = Date.now();
+  try {
+    const outcome = await findProducts(brief);
+    return { ok: true, outcome, elapsedMs: Date.now() - start };
+  } catch (error) {
+    return { ok: false, elapsedMs: Date.now() - start, reason: error instanceof Error ? error.message : String(error) };
+  }
+}
+
+/** Remote: one request to the deployment's probe route. */
+async function runRemote(base: string, briefNumber: number): Promise<BriefRun> {
+  const secret = process.env.PROBE_SECRET;
+  if (!secret) throw new Error("--remote needs PROBE_SECRET in .env.local");
+  const url = new URL(`/api/dev/discovery-probe?brief=${briefNumber}`, base);
+  const start = Date.now();
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: { authorization: `Bearer ${secret}` },
+      signal: AbortSignal.timeout(REMOTE_TIMEOUT_MS),
+    });
+  } catch (error) {
+    const reason = error instanceof Error && error.name === "TimeoutError"
+      ? `no response within ${REMOTE_TIMEOUT_MS}ms`
+      : `request failed: ${error instanceof Error ? error.message : String(error)}`;
+    return { ok: false, elapsedMs: Date.now() - start, reason };
+  }
+  const elapsedMs = Date.now() - start;
+  const body = await response.text();
+  if (!response.ok) {
+    return { ok: false, elapsedMs, reason: `HTTP ${response.status}: ${body.slice(0, 200)}` };
+  }
+  try {
+    const parsed = JSON.parse(body) as { outcome: SearchOutcome; elapsedMs: number };
+    return {
+      ok: true,
+      outcome: parsed.outcome,
+      elapsedMs,
+      note: `HTTP ${response.status} | server elapsed ${parsed.elapsedMs}ms`,
+    };
+  } catch {
+    return { ok: false, elapsedMs, reason: `HTTP ${response.status} but the body isn't JSON: ${body.slice(0, 200)}` };
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+  const remoteAt = args.indexOf("--remote");
+  const remote = remoteAt === -1 ? null : args[remoteAt + 1];
+  if (remoteAt !== -1 && !remote) throw new Error("usage: discovery:probe -- --remote <base-url> [count]");
+  const rest = remoteAt === -1 ? args : args.filter((_, i) => i !== remoteAt && i !== remoteAt + 1);
+
+  if (!remote) installServerOnlyShim();
+
+  const limit = Number(rest[0]) || BRIEFS.length;
   const briefs = BRIEFS.slice(0, limit);
+  if (remote) console.log(`remote: ${new URL(remote).origin}`);
 
   const totals = { proposed: 0, kept: 0, priced: 0, failed: 0, scored: 0, ms: [] as number[] };
   const reasons = new Map<string, number>();
@@ -174,30 +156,30 @@ async function main() {
   // One at a time: the elapsed numbers are what this is for, and running the
   // briefs in parallel would make each one look slower than it is in the app.
   for (const [index, brief] of briefs.entries()) {
-    const start = Date.now();
-    try {
-      const outcome = await findProducts(brief);
-      const elapsed = Date.now() - start;
-      totals.ms.push(elapsed);
-      printOutcome(index, brief, elapsed, outcome);
+    const run = remote ? await runRemote(remote, index + 1) : await runLocal(brief);
+    totals.ms.push(run.elapsedMs);
 
-      totals.proposed += outcome.proposed;
-      totals.kept += outcome.candidates.length;
-      totals.priced += outcome.candidates.filter((c) => c.priceCents !== null).length;
-      if (outcome.candidates.some((c) => scores(brief, c))) totals.scored += 1;
-      for (const d of outcome.dropped) reasons.set(d.reason, (reasons.get(d.reason) ?? 0) + 1);
-
-      // The two defects this probe was written to catch, checked rather than eyeballed.
-      for (const c of outcome.candidates) {
-        if (c.priceCents !== null && c.priceCents <= 0) problems.push(`[${index + 1}] priceCents ${c.priceCents}: ${c.url}`);
-        if (c.currency !== null && c.currency !== "USD") problems.push(`[${index + 1}] currency ${c.currency}: ${c.url}`);
-      }
-    } catch (error) {
-      const elapsed = Date.now() - start;
-      totals.ms.push(elapsed);
+    if (!run.ok) {
       totals.failed += 1;
       console.log(`\n[${index + 1}] ${brief.title}`);
-      console.log(`    FAILED after ${elapsed}ms: ${error instanceof Error ? error.message : String(error)}`);
+      console.log(`    FAILED after ${run.elapsedMs}ms: ${run.reason}`);
+      continue;
+    }
+
+    const { outcome } = run;
+    printOutcome(index, brief, run.elapsedMs, outcome);
+    if (run.note) console.log(`    ${run.note}`);
+
+    totals.proposed += outcome.proposed;
+    totals.kept += outcome.candidates.length;
+    totals.priced += outcome.candidates.filter((c) => c.priceCents !== null).length;
+    if (outcome.candidates.some((c) => scores(brief, c))) totals.scored += 1;
+    for (const d of outcome.dropped) reasons.set(d.reason, (reasons.get(d.reason) ?? 0) + 1);
+
+    // The two defects this probe was written to catch, checked rather than eyeballed.
+    for (const c of outcome.candidates) {
+      if (c.priceCents !== null && c.priceCents <= 0) problems.push(`[${index + 1}] priceCents ${c.priceCents}: ${c.url}`);
+      if (c.currency !== null && c.currency !== "USD") problems.push(`[${index + 1}] currency ${c.currency}: ${c.url}`);
     }
   }
 

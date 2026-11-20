@@ -9,14 +9,16 @@ const PUBLIC_PREFIXES = ["/login", "/auth"];
 /**
  * API routes that carry their own credential, and must be left alone.
  *
- * These are not holes in the auth model — they are the two callers that cannot
- * hold a cookie. `/api/capture` is an iOS Shortcut and a browser extension
+ * These are not holes in the auth model — they are callers that cannot hold a
+ * cookie. `/api/capture` is an iOS Shortcut and a browser extension
  * presenting a bearer token minted in Settings; `/api/cron` is a scheduled job
- * presenting a shared secret. Each checks its credential as the first thing it
- * does, and each would be permanently unreachable if the blanket `/api/` rule
- * below saw it first — which is exactly the bug this list exists to prevent.
+ * presenting a shared secret; `/api/dev/discovery-probe` is a measurement
+ * bench presenting `PROBE_SECRET`, and 404s in production. Each checks its
+ * credential as the first thing it does, and each would be permanently
+ * unreachable if the blanket `/api/` rule below saw it first — which is
+ * exactly the bug this list exists to prevent.
  */
-const SELF_AUTHENTICATING = ["/api/capture", "/api/cron"];
+const SELF_AUTHENTICATING = ["/api/capture", "/api/cron", "/api/dev/discovery-probe"];
 
 function matches(pathname: string, prefixes: string[]) {
   return prefixes.some(
