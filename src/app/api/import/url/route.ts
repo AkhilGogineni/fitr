@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { extractProduct } from "@/lib/intake/product-page";
+import { extractProduct, isChallengePage } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 import { getUser } from "@/lib/supabase/server";
 
@@ -51,6 +51,20 @@ export async function POST(request: Request) {
     }
 
     const html = new TextDecoder("utf-8").decode(page.body);
+    // A bot wall's 200 interstitial is a refusal, not an empty product page:
+    // answer it the way a 403 is answered, rather than prefilling the form
+    // with "Client Challenge".
+    if (isChallengePage(html)) {
+      const host = new URL(page.finalUrl).hostname.replace(/^www\./, "");
+      return NextResponse.json(
+        {
+          // Not the inbox's "use the extension" advice: the extension saves to
+          // the inbox, not to the wardrobe form this answers.
+          error: `${host} blocks automated readers, so the page couldn't be read. Add the photo and details by hand.`,
+        },
+        { status: 502 },
+      );
+    }
     const product = extractProduct(html, page.finalUrl);
 
     /*

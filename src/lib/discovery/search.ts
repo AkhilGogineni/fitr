@@ -4,6 +4,7 @@ import { judgeRelevance, type Relevance } from "@/lib/discovery/relevance";
 import {
   classifyPage,
   extractProduct,
+  isChallengePage,
   readCategoryHints,
   readStock,
   readTitles,
@@ -174,6 +175,8 @@ export type DropReason =
   | "fetch_rejected"
   /** Reachable, but nothing product-shaped in the HTML (a JS shell or soft 404). */
   | "no_product_markup"
+  /** A bot wall answered 200 with its challenge interstitial (`isChallengePage`). */
+  | "bot_wall"
   /** A homepage, collection or category grid — not one buyable item. */
   | "not_a_product"
   /** Every offer on the page is OutOfStock / SoldOut / Discontinued. */
@@ -403,6 +406,7 @@ async function verify(proposal: Proposal, brief: SearchBrief): Promise<Verified>
       timeoutMs: VERIFY_TIMEOUT_MS,
     });
     const html = new TextDecoder().decode(page.body);
+    if (isChallengePage(html)) return drop("bot_wall");
     const product = extractProduct(html, page.finalUrl);
 
     // No Product data, no image, no price, no og:title: a JavaScript shell or

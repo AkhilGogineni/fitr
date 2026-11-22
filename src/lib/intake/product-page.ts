@@ -708,3 +708,49 @@ export function readTitles(html: string): string[] {
   ];
   return [...new Set(candidates.filter((title): title is string => title !== null))];
 }
+
+/**
+ * Is this a bot wall's interstitial rather than the page that was asked for?
+ *
+ * Some walls answer 200, not 403. Observed 2026-11-21: abercrombie.com and
+ * hollisterco.com return a 3,038-byte page titled "Client Challenge" that
+ * loads a script from `/_fs-ch-…/`; blankapparel.com redirects to a 3.5KB
+ * "Captcha Page". `safeFetch` only refuses non-2xx, so without this the
+ * interstitial was read as the product: captures saved as "Client Challenge"
+ * with no picture.
+ *
+ * Generic on purpose — no hostnames. Fires only when all three hold:
+ *
+ *   1. the page carries no product evidence at all (Product JSON-LD,
+ *      `og:type` product, `og:image`, a price meta) — a real product page with
+ *      a captcha-protected newsletter form is still a product page;
+ *   2. the body is small (under 60KB) — interstitials are a few KB, product
+ *      pages hundreds;
+ *   3. it names itself as a challenge: its `<title>` is one of the walls'
+ *      stock titles ("Client Challenge", "Just a moment...", "Attention
+ *      Required!", "Access Denied", "Pardon Our Interruption", "Robot or
+ *      human?", "Captcha Page", …), or it loads a known challenge script
+ *      (Cloudflare `challenge-platform`/`cf-chl`, Akamai `bm-verify` /
+ *      `sec-cpt`, PerimeterX `px-captcha`, DataDome `captcha-delivery`,
+ *      Kasada `KPSDK`, the `/_fs-ch-` challenge path).
+ */
+const CHALLENGE_TITLE =
+  /^\s*(?:client challenge|just a moment|attention required|access denied|pardon our interruption|robot or human|are you a (?:robot|human)|captcha(?: page)?|security check|verify(?:ing)? you are (?:a )?human|one more step|request blocked|too many requests|please wait while we verify)\b/i;
+const CHALLENGE_MARKER =
+  /cdn-cgi\/challenge-platform|\bcf[-_]chl|\/_fs-ch-|bm-verify|sec-cpt|_sec\/cp_challenge|px-captcha|_pxCaptcha|captcha-delivery\.com|\bKPSDK\b|\/ips\.js\?/i;
+const CHALLENGE_MAX_BYTES = 60_000;
+
+export function isChallengePage(html: string): boolean {
+  if (html.length > CHALLENGE_MAX_BYTES) return false;
+
+  const nodes = readJsonLdNodes(html);
+  const productEvidence =
+    nodes.some((node) => hasType(node, "Product") || hasType(node, "ProductGroup")) ||
+    /product/i.test(metaContent(html, "og:type") ?? "") ||
+    metaContent(html, "og:image", "og:image:url") !== null ||
+    metaContent(html, "product:price:amount", "og:price:amount") !== null;
+  if (productEvidence) return false;
+
+  const title = decodeEntities(html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "");
+  return CHALLENGE_TITLE.test(title) || CHALLENGE_MARKER.test(html);
+}

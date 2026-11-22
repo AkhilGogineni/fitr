@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { extractProduct } from "@/lib/intake/product-page";
+import { extractProduct, isChallengePage } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 import { buildObjectKey, isAllowedContentType, putObject } from "@/lib/r2";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -96,6 +96,7 @@ export async function POST(request: Request) {
     source?: string;
     note?: string;
     title?: string;
+    brand?: string;
     imageBase64?: string;
     contentType?: string;
   };
@@ -126,7 +127,8 @@ export async function POST(request: Request) {
           : "other";
 
   let imageUrl: string | null = null;
-  let brand: string | null = null;
+  // The extension reads brand off the rendered page; a Shortcut sends none.
+  let brand = typeof body.brand === "string" ? body.brand.trim().slice(0, 80) || null : null;
   let priceCents: number | null = null;
   let currency: string | null = null;
 
@@ -140,15 +142,18 @@ export async function POST(request: Request) {
         // capture is worth more than the metadata on it.
         timeoutMs: 6_000,
       });
-      const product = extractProduct(
-        new TextDecoder().decode(page.body),
-        page.finalUrl,
-      );
-      title = title ?? product.title;
-      imageUrl = product.imageUrl;
-      brand = product.brand;
-      priceCents = product.priceCents;
-      currency = product.currency;
+      const html = new TextDecoder().decode(page.body);
+      // A bot wall's 200 interstitial says nothing about the item. Reading it
+      // would title a Shortcut capture "Client Challenge"; for the extension
+      // it would be worse, replacing what the user's own browser read.
+      if (!isChallengePage(html)) {
+        const product = extractProduct(html, page.finalUrl);
+        title = title ?? product.title;
+        imageUrl = product.imageUrl;
+        brand = brand ?? product.brand;
+        priceCents = product.priceCents;
+        currency = product.currency;
+      }
     } catch (error) {
       // Unreachable, private, slow, or a bot wall — none of it stops a capture.
       // A social post is the common case here and has no product markup anyway.

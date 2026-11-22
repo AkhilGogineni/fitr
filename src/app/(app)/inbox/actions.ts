@@ -5,7 +5,7 @@ import { refresh } from "next/cache";
 import { WISH_COLUMNS, type WishItemRow } from "@/lib/captures";
 import { isCategory, type Category } from "@/lib/garments";
 import { fetchTikTokOEmbed } from "@/lib/intake/oembed";
-import { extractProduct } from "@/lib/intake/product-page";
+import { extractProduct, isChallengePage } from "@/lib/intake/product-page";
 import { FetchRejected, safeFetch } from "@/lib/intake/safe-fetch";
 import type { ActionResult } from "@/lib/items";
 import { buildObjectKey, putObject } from "@/lib/r2";
@@ -128,12 +128,20 @@ export async function captureUrl(
       maxBytes: 3_000_000,
       timeoutMs: 8_000,
     });
-    const product = extractProduct(new TextDecoder().decode(page.body), page.finalUrl);
-    title = product.title;
-    imageUrl = product.imageUrl;
-    brand = product.brand;
-    priceCents = product.priceCents;
-    currency = product.currency;
+    const html = new TextDecoder().decode(page.body);
+    if (isChallengePage(html)) {
+      // A bot wall that answered 200 with its own interstitial. Nothing on it
+      // is about the item — reading it is how captures got titled "Client
+      // Challenge" — so it is treated exactly like a 403.
+      blockedBySite = true;
+    } else {
+      const product = extractProduct(html, page.finalUrl);
+      title = product.title;
+      imageUrl = product.imageUrl;
+      brand = product.brand;
+      priceCents = product.priceCents;
+      currency = product.currency;
+    }
   } catch (error) {
     // A link that can't be read is still worth keeping — but a site that
     // answered 403 is a different situation from one that was unreachable,
@@ -228,7 +236,10 @@ export async function captureUrl(
     ok: true,
     data: data.id,
     warning: blockedBySite
-      ? `Saved — but ${host} blocks automated readers, so it couldn't get a picture. Attach one on the card.`
+      ? // The extension reads the page inside the user's own browser tab
+        // (extension/reader.js), after the wall has let them through — so it
+        // gets the name and picture this server-side read can't.
+        `Saved — but ${host} blocks automated readers, so fitr couldn't read the page. Save it with the fitr browser extension, which reads it in your own browser, or attach a picture on the card.`
       : imageUrl
         ? undefined
         : `Saved, with no picture — the page didn't offer one. Attach one on the card if you have it.`,
